@@ -30,11 +30,11 @@
 
 function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
 
-    k = 3;          % number of fuel components
-    r0 = 0.05;      % threshold rainfall [mm/h]
-    rk = 8;         % saturation rain intensity [mm/h]
-    Trk = 14 * 3600;% time constant for wetting model [s]
-    S = 2.5;        % saturation intensity [dimensionless]
+    k = (length(m_ext) - 4)/2;      % number of fuel components
+    r0 = 0.05;                      % threshold rainfall [mm/h]
+    rk = 8;                         % saturation rain intensity [mm/h]
+    Trk = 14 * 3600;                % time constant for wetting model [s]
+    S = 2.5;                        % saturation intensity [dimensionless]
     
     Tk = [1, 10, 100]' * 3600;  % time lags for fuel classes [s]
     
