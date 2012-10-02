@@ -30,7 +30,7 @@
 
 function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
 
-    k = (length(m_ext) - 4)/2;      % number of fuel components
+    k = (length(m_ext) - 3)/2;      % number of fuel components
     r0 = 0.05;                      % threshold rainfall [mm/h]
     rk = 8;                         % saturation rain intensity [mm/h]
     Trk = 14 * 3600;                % time constant for wetting model [s]
@@ -41,10 +41,9 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
     % first, we break the state vector into components
     m = m_ext(1:k);
     dlt_Tk = m_ext(k+1:2*k);
-    dlt_Ed = m_ext(2*k+1);
-    dlt_Ew = m_ext(2*k+2);
-    dlt_S = m_ext(2*k+3);
-    dlt_Trk = m_ext(2*k+4);
+    dlt_E = m_ext(2*k+1);
+    dlt_S = m_ext(2*k+2);
+    dlt_Trk = m_ext(2*k+3);
     
     % saturated vapor pressure
     Pws = exp(54.842763 - 6763.22/T - 4.210 * log(T) + 0.000367*T + ...
@@ -63,8 +62,8 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
     
     % rescale to fractions
     % modification: extended model equilibria affected by assimilation
-    Ed = Ed * 0.01 + dlt_Ed;
-    Ew = Ew * 0.01 + dlt_Ew;
+    Ed = Ed * 0.01 + dlt_E;
+    Ew = Ew * 0.01 + dlt_E;
     
     % if rainfall is above threshold, apply saturation model
     if(r > r0)
@@ -88,7 +87,7 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
     % select appropriate integration method (small change -> big errors in
     % the standard solution)
     change = dt * rlag;
-    Jm_ext = zeros(2*k+4);
+    Jm_ext = zeros(2*k+3);
     for i=1:k
         
         if(change(i) < 0.01)
@@ -137,10 +136,10 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
             % rain model active
 
             % partial m_i/partial deltaS
-            Jm_ext(i,2*k+3) =  dmi_dequi;
+            Jm_ext(i,2*k+2) =  dmi_dequi;
 
             % partial m_i/partial deltaTkr
-            Jm_ext(i,2*k+4) = dmi_dchng * dt * (exp(-(r - r0)/rk) - 1) * (Trk + dlt_Trk)^(-2);
+            Jm_ext(i,2*k+3) = dmi_dchng * dt * (exp(-(r - r0)/rk) - 1) * (Trk + dlt_Trk)^(-2);
 
         end
         
@@ -153,5 +152,4 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
     Jm_ext(2*k+1,2*k+1) = 1.0;
     Jm_ext(2*k+2,2*k+2) = 1.0;
     Jm_ext(2*k+3,2*k+3) = 1.0;
-    Jm_ext(2*k+4,2*k+4) = 1.0;
         

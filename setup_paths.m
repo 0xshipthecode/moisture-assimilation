@@ -4,5 +4,9 @@
 %
 
 if(~exist('ukf_select_sigma_points.m','file'))
-  addpath(genpath('.'));
+  cp = pwd();
+  addpath(fullfile(cp, 'extended_model'));
+  addpath(fullfile(cp, 'state_model'));
+  addpath(fullfile(cp, 'tests'));
+  addpath(fullfile(cp, 'ukf'));
 end

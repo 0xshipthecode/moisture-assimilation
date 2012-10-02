@@ -62,7 +62,7 @@ trS = zeros(N, 1);
 P14 = zeros(N, 1);
 
 % W0 is a UKF parameter affecting the sigma point distribution
-W0 = -0.8;
+W0 = 0.2;
 Ndim = size(m_ext, 1);
 Npts = Ndim * 2 + 1;
 

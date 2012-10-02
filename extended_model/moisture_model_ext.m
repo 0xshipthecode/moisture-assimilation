@@ -37,7 +37,7 @@
 
 function [m_ext, model_id] = moisture_model_ext(T, Q, P, m_ext, r, dt)
 
-    k = (length(m_ext) - 4) / 2;    % number of fuel components
+    k = (length(m_ext) - 3) / 2;    % number of fuel components
     r0 = 0.05;                      % threshold rainfall [mm/h]
     rk = 8;                         % saturation rain intensity [mm/h]
     Trk = 14 * 3600;                % time constant for wetting model [s]
@@ -48,10 +48,9 @@ function [m_ext, model_id] = moisture_model_ext(T, Q, P, m_ext, r, dt)
     % first, we break the state vector into components
     m = m_ext(1:k);
     dlt_Tk = m_ext(k+1:2*k);
-    dlt_Ed = m_ext(2*k+1);
-    dlt_Ew = m_ext(2*k+2);
-    dlt_S = m_ext(2*k+3);
-    dlt_Trk = m_ext(2*k+4);
+    dlt_E = m_ext(2*k+1);
+    dlt_S = m_ext(2*k+2);
+    dlt_Trk = m_ext(2*k+3);
 
     % saturated vapor pressure
     Pws = exp(54.842763 - 6763.22/T - 4.210 * log(T) + 0.000367*T + ...
@@ -70,8 +69,8 @@ function [m_ext, model_id] = moisture_model_ext(T, Q, P, m_ext, r, dt)
     
     % rescale to fractions
     % modification: extended model equilibria affected by assimilation
-    Ed = Ed * 0.01 + dlt_Ed;
-    Ew = Ew * 0.01 + dlt_Ew;
+    Ed = Ed * 0.01 + dlt_E;
+    Ew = Ew * 0.01 + dlt_E;
     
     % if rainfall is above threshold, apply saturation model
     if(r > r0)
