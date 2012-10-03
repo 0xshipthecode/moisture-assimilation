@@ -122,8 +122,9 @@ plot(t, m_f(:,1), 'g-', 'linewidth', 2);
 hold on;
 plot(t, m_n(:,1), 'r-', 'linewidth', 2);
 plot(t, r, 'k--', 'linewidth', 2);
+plot(t, model_ids(:,1), 'kx');
 plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'b');
-legend('system + EKF', 'raw system', 'rainfall [mm/h]', 'observations');
+legend('system + EKF', 'raw system', 'rainfall [mm/h]', 'model_id', 'observations');
 title('Plot of the evolution of the moisture model', 'fontsize', 16);
 
 % select time indices corresponding to observation times

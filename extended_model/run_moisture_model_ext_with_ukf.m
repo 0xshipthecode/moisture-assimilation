@@ -15,7 +15,7 @@ T = 300;            % surface temperature, Kelvin
 q = 0.005;          % water vapor content (dimensionless)
 p = 101325;         % surface pressure, Pascals
 n_k = 1;            % number of fuel categories
-Ndim = 2*n_k + 4;
+Ndim = 2*n_k + 3;
 
 % external driving: rainfall characteristics
 r = zeros(N,1);
@@ -38,7 +38,7 @@ m_ext(1:n_k) = 0.03;
 P = eye(Ndim) * 0.01;   % error covariance of the initial guess
 
 % Kalman filter Q (model error covariance) and R (measurement error covar)
-Q = eye(Ndim) * 0.01;
+Q = eye(Ndim) * 0.001;
 R = eye(n_k) * 0.5;
 
 % the observation operator is a n_k x Ndim matrix with I_(n_k) on the left
@@ -59,7 +59,7 @@ model_ids = zeros(N, n_k);
 trP = zeros(N, 1);
 trK = zeros(N, 1);
 trS = zeros(N, 1);
-P14 = zeros(N, 1);
+sP = zeros(N, Ndim, Ndim);
 
 % W0 is a UKF parameter affecting the sigma point distribution
 W0 = 0.2;
@@ -98,7 +98,7 @@ for i = 2:N
     % estimate covariance matrix using the sigma point set
     sqrtP = (m_sigma_1 - repmat(m_pred, 1, Npts)) * diag(sqrt(w));
     P = Q + sqrtP * sqrtP';
-    P14(i) = P(1,4);
+    sP(i, :, :) = P;
     trP(i) = abs(prod(eig(P)));
     
     % KALMAN UPDATE STEP (if measurement available) 
@@ -146,7 +146,7 @@ for i = 2:N
 end
 
 figure;
-subplot(211);
+subplot(311);
 plot(t, m_f(:,1), 'g-', 'linewidth', 2);
 hold on;
 plot(t, m_n(:,1), 'r-', 'linewidth', 2);
@@ -158,25 +158,34 @@ title('Plot of the evolution of the moisture model', 'fontsize', 16);
 
 % select time indices corresponding to observation times
 [I,J] = ind2sub([N_obs, N], find(repmat(t', N_obs, 1) == repmat(obs_time, 1, N)));
-subplot(212);
+subplot(312);
 plot(t, log10(trP), 'b-', 'linewidth', 1.5);
 hold on;
-plot(t, log10(P14), 'y-', 'linewidth', 1.5);
-%plot(t, log10(trJ), 'k-', 'linewidth', 1.5);
 plot(obs_time, log10(trS(J)), 'ko', 'markerfacecolor', 'green', 'markersize', 10);
 plot(obs_time, log10(trK(J)), 'ko', 'markerfacecolor', 'red', 'markersize', 10);
 hold off;
-legend('State', 'P(1,4)', 'Innovation', 'Kalman gain');
+legend('State', 'Innovation', 'Kalman gain');
 title('Kalman filter: log(generalized variance) of covar/Kalman matrices vs. time', 'fontsize', 16);
+
+subplot(313);
+plot(t, log10(abs(sP(:, 1, 2))), 'r-', 'linewidth', 1.5);
+hold on
+plot(t, log10(abs(sP(:, 1, 3))), 'g-', 'linewidth', 1.5);
+plot(t, log10(abs(sP(:, 1, 4))), 'b-', 'linewidth', 1.5);
+plot(t, log10(abs(sP(:, 1, 5))), 'k-', 'linewidth', 1.5);
+hold off
+legend('P(1,2)', 'P(1,3)', 'P(1,4)', 'P(1,5)')
+title('Covariance between moisture and system parameters');
+
 
 figure;
 subplot(311);
-plot(repmat(t, 1, 2), m_f(:,[2, 6]), 'linewidth', 1.5);
+plot(repmat(t, 1, 2), m_f(:,[2, 5]), 'linewidth', 1.5);
 title('Time constant changes');
 legend('dTk1', 'dTrk');
 subplot(312);
-plot(repmat(t, 1, 3), m_f(:, [3, 4, 5]), 'linewidth', 1.5);
-legend('dEd', 'dEw', 'dS');
+plot(repmat(t, 1, 2), m_f(:, [3, 4]), 'linewidth', 1.5);
+legend('dE', 'dS');
 title('Equilibrium changes');
 subplot(313);
 plot(t, model_ids, 'or');
@@ -187,7 +196,7 @@ rng = 40:200;
 plot(t(rng), m_n(rng,1), 'k-', 'linewidth', 2);
 hold on
 plot(t(rng), m_f(rng,1), 'r-', 'linewidth', 2);
-plot(repmat(t(rng), 1, 3), squeeze(sigma_pts(rng, 1, [1,2,7])), 'x');
+plot(repmat(t(rng), 1, 3), squeeze(sigma_pts(rng, 1, [1,2,6])), 'x');
 hold off
 title('Plot of the 1st (fast) fuel with sigma point projections');
 legend('Model', 'Model+UKF', '\sigma-points');

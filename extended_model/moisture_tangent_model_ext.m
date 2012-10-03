@@ -76,8 +76,13 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
     
     else
         
-        % the equilibrium level is given as 
-        equi = (m > Ed) * Ed + (m < Ew) * Ew + (m >= Ew) .* (m <= Ed) .* m;
+        % the equilibrium level is given depending on the current moisture
+        % state and is Ed (drying equilibrium) if moisture is above Ed, Ew
+        % (wetting equilibrium) if model is below Ew or the moisture value
+        % itself if in between).
+        equi = m;
+        equi(m > Ed) = Ed;
+        equi(m < Ew) = Ew;
 
         % the inverted time lag is constant according to fuel category
         rlag = 1 ./ (Tk + dlt_Tk);
@@ -121,14 +126,12 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
             % drying/wetting model active
 
             % partial m_i/partial delta_Tk
-            Jm_ext(i,k+i) = dmi_dchng * dt * (-1) * (Tk(k) + dlt_Tk(k))^(-2);
+            Jm_ext(i,k+i) = dmi_dchng * (-dt) * (Tk(k) + dlt_Tk(k))^(-2);
 
-            if(m(i) > Ed)
-                % drying model, small change partial m_i/partial deltaEd
+            % if drying/wetting model active, jacobian entry is nonzero;
+            % it is zero if the 'dead zone' model is active
+            if((m(i) > Ed) || (m(i) < Ew))
                 Jm_ext(i,2*k+1) = dmi_dequi;
-            elseif(m(i) < Ew)
-                % wetting model, small change partial m_i/partial deltaEw
-                Jm_ext(i,2*k+2) = dmi_dequi;
             end
 
         else
@@ -136,7 +139,7 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
             % rain model active
 
             % partial m_i/partial deltaS
-            Jm_ext(i,2*k+2) =  dmi_dequi;
+            Jm_ext(i,2*k+2) = dmi_dequi;
 
             % partial m_i/partial deltaTkr
             Jm_ext(i,2*k+3) = dmi_dchng * dt * (exp(-(r - r0)/rk) - 1) * (Trk + dlt_Trk)^(-2);
@@ -152,4 +155,3 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
     Jm_ext(2*k+1,2*k+1) = 1.0;
     Jm_ext(2*k+2,2*k+2) = 1.0;
     Jm_ext(2*k+3,2*k+3) = 1.0;
-        
