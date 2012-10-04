@@ -2,12 +2,12 @@
 
 %
 %  This script runs the extended moisture model for one grid point with the
-%  Kalman filter.
+%  Extended Kalman filter.
 %
 
 
 % simulation time in hours (integration step for moisture is 1h)
-t = (0:0.1:200)';
+t = (0:1:500)';
 N = length(t);
 
 % parameters of the simulation
@@ -35,7 +35,7 @@ current_obs = 1;
 m_ext = zeros(Ndim,1);
 m_ext(1:n_k) = 0.03;
 
-P = eye(Ndim) * 0.01;   % error covariance of the initial guess
+P = eye(Ndim) * 0.001;   % error covariance of the initial guess
 
 % Kalman filter Q (model error covariance) and R (measurement error covar)
 Q = eye(Ndim) * 0.01;
