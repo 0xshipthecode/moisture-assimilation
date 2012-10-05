@@ -19,7 +19,7 @@ Ndim = 2*n_k + 3;
 
 % external driving: rainfall characteristics
 r = zeros(N,1);
-r((t > 5) .* (t < 65) > 0) = 2; % 2mm of rainfall form hour 5 to 65
+r((t > 5) .* (t < 65) > 0) = 1.1; % 2mm of rainfall form hour 5 to 65
 
 % measured moisture at given times
 obs_time = [2, 20, 50, 100, 140]';   % observation time in hours
@@ -38,7 +38,7 @@ m_ext(1:n_k) = 0.03;
 P = eye(Ndim) * 0.01;   % error covariance of the initial guess
 
 % Kalman filter Q (model error covariance) and R (measurement error covar)
-Q = eye(Ndim) * 0.001;
+Q = eye(Ndim) * 0.01;
 R = eye(n_k) * 0.5;
 
 % the observation operator is a n_k x Ndim matrix with I_(n_k) on the left
@@ -151,9 +151,8 @@ plot(t, m_f(:,1), 'g-', 'linewidth', 2);
 hold on;
 plot(t, m_n(:,1), 'r-', 'linewidth', 2);
 plot(t, r, 'k--', 'linewidth', 2);
-plot(t, model_ids(:,1), 'kx');
 plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'b');
-legend('system + UKF', 'raw system', 'rainfall [mm/h]', 'model id', 'observations');
+legend('system + UKF', 'raw system', 'rainfall [mm/h]', 'observations');
 title('Plot of the evolution of the moisture model', 'fontsize', 16);
 
 % select time indices corresponding to observation times

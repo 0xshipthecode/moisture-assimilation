@@ -35,7 +35,7 @@ current_obs = 1;
 m_ext = zeros(Ndim,1);
 m_ext(1:n_k) = 0.03;
 
-P = eye(Ndim) * 0.001;   % error covariance of the initial guess
+P = eye(Ndim) * 0.01;   % error covariance of the initial guess
 
 % Kalman filter Q (model error covariance) and R (measurement error covar)
 Q = eye(Ndim) * 0.01;
@@ -122,9 +122,8 @@ plot(t, m_f(:,1), 'g-', 'linewidth', 2);
 hold on;
 plot(t, m_n(:,1), 'r-', 'linewidth', 2);
 plot(t, r, 'k--', 'linewidth', 2);
-plot(t, model_ids(:,1), 'kx');
 plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'b');
-legend('system + EKF', 'raw system', 'rainfall [mm/h]', 'model_id', 'observations');
+legend('system + EKF', 'raw system', 'rainfall [mm/h]', 'observations');
 title('Plot of the evolution of the moisture model', 'fontsize', 16);
 
 % select time indices corresponding to observation times
