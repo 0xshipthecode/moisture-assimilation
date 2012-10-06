@@ -7,7 +7,7 @@
 
 
 % simulation time in hours (integration step for moisture is 1h)
-t = (0:1:500)';
+t = (0:1:150)';
 N = length(t);
 
 % parameters of the simulation
@@ -22,7 +22,7 @@ r = zeros(N,1);
 r((t > 5) .* (t < 65) > 0) = 1.1; % 2mm of rainfall form hour 5 to 65
 
 % measured moisture at given times
-obs_time = [2, 20, 50, 100, 140]';   % observation time in hours
+obs_time = [2, 20, 50, 110, 140]';   % observation time in hours
 obs_moisture = [ 0.05;  ...
                  0.3; ...
                  0.7; ...
@@ -61,6 +61,7 @@ trK = zeros(N, 1);
 trS = zeros(N, 1);
 trJ = zeros(N, 1);
 sP = zeros(N, Ndim, Ndim);
+sJ = zeros(N, Ndim, Ndim);
 
 % predict & update loop
 for i=2:N
@@ -78,6 +79,7 @@ for i=2:N
     
     % update covariance matrix using the tangent linear model
     Jm = moisture_tangent_model_ext(T, q, p, m_f(i-1,:)', r(i), dt);
+    sJ(i, :, :) = Jm;
     P = Jm*P*Jm' + Q;
     sP(i, :, :) = P;
     %trP(i) = trace(P);
@@ -120,43 +122,46 @@ figure;
 subplot(311);
 plot(t, m_f(:,1), 'g-', 'linewidth', 2);
 hold on;
+plot(repmat(t, 1, 2), [m_f(:,1) - sqrt(sP(:, 1, 1)), m_f(:,1) + sqrt(sP(:, 1, 1))], 'gx');
 plot(t, m_n(:,1), 'r-', 'linewidth', 2);
 plot(t, r, 'k--', 'linewidth', 2);
 plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'b');
-legend('system + EKF', 'raw system', 'rainfall [mm/h]', 'observations');
-title('Plot of the evolution of the moisture model', 'fontsize', 16);
+h = legend('system + EKF', '$$m - \sigma$$', '$$m + \sigma$$', 'raw system', 'rainfall [mm/h]', 'observations');
+set(h, 'interpreter', 'latex');
+title('Plot of the evolution of the moisture model [EKF]', 'fontsize', 16);
 
 % select time indices corresponding to observation times
 [I,J] = ind2sub([N_obs, N], find(repmat(t', N_obs, 1) == repmat(obs_time, 1, N)));
 subplot(312);
-plot(t, log10(trP), 'b-', 'linewidth', 1.5);
+plot(t, log10(trP), 'b-', 'linewidth', 2);
 hold on;
-plot(t, log10(trJ), 'k-', 'linewidth', 1.5);
-plot(obs_time, log10(trS(J)), 'ko', 'markerfacecolor', 'green', 'markersize', 10);
-plot(obs_time, log10(trK(J)), 'ko', 'markerfacecolor', 'red', 'markersize', 10);
+plot(t, log10(trJ), 'k-', 'linewidth', 2);
+plot(obs_time, log10(trS(J)), 'ko', 'markerfacecolor', 'green', 'markersize', 6);
+plot(obs_time, log10(trK(J)), 'ko', 'markerfacecolor', 'red', 'markersize', 6);
 hold off;
 legend('State', 'Jacobian', 'Innovation', 'Kalman gain');
-title('Kalman filter: log(generalized variance) of covar/Kalman matrices vs. time', 'fontsize', 16);
+title('Kalman filter: log(generalized variance) of covar/Kalman matrices vs. time [EKF]', 'fontsize', 16);
 
 subplot(313);
-plot(t, log10(abs(sP(:, 1, 2))), 'r-', 'linewidth', 1.5);
+plot(t, sP(:, 1, 1), 'r-', 'linewidth', 2);
 hold on
-plot(t, log10(abs(sP(:, 1, 3))), 'g-', 'linewidth', 1.5);
-plot(t, log10(abs(sP(:, 1, 4))), 'b-', 'linewidth', 1.5);
-plot(t, log10(abs(sP(:, 1, 5))), 'k-', 'linewidth', 1.5);
+plot(t, sP(:, 1, 2), 'g-', 'linewidth', 2);
+plot(t, sP(:, 1, 3), 'b-', 'linewidth', 2);
+plot(t, sP(:, 1, 4), 'k-', 'linewidth', 2);
+plot(t, sP(:, 1, 5), 'm-', 'linewidth', 2);
 hold off
-legend('P(1,2)', 'P(1,3)', 'P(1,4)', 'P(1,5)')
-title('Covariance between moisture and system parameters');
+legend('var(m)', 'cov(m,dT)', 'cov(m,dE)', 'cov(m,dS)', 'cov(m,dTr)');
+title('Covariance between moisture and system parameters [EKF]');
 
 figure;
 subplot(311);
-plot(repmat(t, 1, 2), m_f(:,[2,5]), 'linewidth', 1.5);
+plot(repmat(t, 1, 2), m_f(:,[2,5]), 'linewidth', 2);
 title('Time constant changes');
 legend('dTk1', 'dTrk');
 subplot(312);
-plot(repmat(t, 1, 2), m_f(:, [3,4]), 'linewidth', 1.5);
+plot(repmat(t, 1, 2), m_f(:, [3,4]), 'linewidth', 2);
 legend('dE', 'dS');
 title('Equilibrium changes');
 subplot(313);
 plot(t, model_ids, 'or');
-title('Active submodel of the moisture model');
+title('Active submodel of the moisture model [EKF]');

@@ -112,7 +112,7 @@ function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
             Jm_ext(i,i) = 1.0 - change(i) * (1 - 0.5 * change(i));
             
             % partial m_i/partial change
-            dmi_dchng = (equi(i) - m(i)) * (1 - change(i));
+            dmi_dchng = (equi(i) - m(i)) * (1.0 - change(i));
             
             % partial m_i/partial equi
             dmi_dequi = change(i) * (1 - 0.5 * change(i));
