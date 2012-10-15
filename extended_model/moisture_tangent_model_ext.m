@@ -9,11 +9,12 @@
 %  This function will run the tangent linear moisture model for one time step.
 %
 %  Synopsis: 
-%            m_ext = moisture_model_ext_tangent(T, Q, P, m_ext, w, r, dt)
+%            m_ext = moisture_model_ext_tangent(T, Tk, Q, P, m_ext, w, r, dt)
 %
 %  Arguments:
 %
 %            T - the temperature in Kelvin
+%            Tk - the nominal time lags for each fuel class (seconds)
 %            Q - the water vapor content (fraction, dimensionless)
 %            P - the current surface atmospheric pressure (Pascals)
 %            m - the extended state (see moisture_model_ext.m) including
@@ -28,15 +29,13 @@
 %            Jm_ext - the Jacobian of the nonlinear model at previous (m_ext)
 %
 
-function Jm_ext = moisture_tangent_model_ext(T, Q, P, m_ext, r, dt)
+function Jm_ext = moisture_tangent_model_ext(T, Tk, Q, P, m_ext, r, dt)
 
     k = (length(m_ext) - 3)/2;      % number of fuel components
     r0 = 0.05;                      % threshold rainfall [mm/h]
     rk = 8;                         % saturation rain intensity [mm/h]
     Trk = 14 * 3600;                % time constant for wetting model [s]
     S = 2.5;                        % saturation intensity [dimensionless]
-    
-    Tk = [1, 10, 100]' * 3600;  % time lags for fuel classes [s]
     
     % first, we break the state vector into components
     m = m_ext(1:k);

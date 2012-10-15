@@ -13,7 +13,8 @@ N = length(t);
 T = 300;            % surface temperature, Kelvin
 q = 0.005;          % water vapor content (dimensionless)
 p = 101325;         % surface pressure, Pascals
-n_k = 1;            % number of fuel categories
+n_k = 2;            % number of fuel categories
+Tk = [10, 100]' * 3600;  % time lags for fuel categories
 Ndim = 2*n_k + 3;
 
 % external driving: rainfall characteristics
@@ -22,11 +23,12 @@ r((t > 5) .* (t < 65) > 0) = 1.1; % 2mm of rainfall form hour 5 to 65
 
 % measured moisture at given times
 obs_time = [2, 20, 50, 110, 140]';   % observation time in hours
-obs_moisture = [ 0.05;  ...
-                 0.3; ...
-                 0.7; ...
-                 0.03; ...
-                 0.032]; % measurements for the 3 fuel classes
+obs_moisture = [ 0.05,  0.045; ...
+                 0.3, 0.2; ...
+                 0.7, 0.6; ...
+                 0.03, 0.04; ...
+                 0.032, 0.035]; % measurements for the n_k fuel classes
+
 N_obs = length(obs_time);
 current_obs = 1;
 
@@ -79,7 +81,7 @@ for i = 2:N
     sigma_pts(i, :, :) = m_sigma;
     
     % compute & store results for system without Kalman filtering
-    m_n(i, :) = moisture_model_ext(T, q, p, m_n(i-1,:)', r(i), dt);
+    m_n(i, :) = moisture_model_ext(T, Tk, q, p, m_n(i-1,:)', r(i), dt);
 
     % UKF prediction step - run the sigma set through the nonlinear
     % function
@@ -87,9 +89,9 @@ for i = 2:N
     % estimate new moisture mean based on last best guess (m)
     m_sigma_1 = zeros(Ndim, Npts);
     for n=1:Npts-1
-        m_sigma_1(:,n) = moisture_model_ext(T, q, p, m_sigma(:,n), r(i), dt);
+        m_sigma_1(:,n) = moisture_model_ext(T, Tk, q, p, m_sigma(:,n), r(i), dt);
     end
-    [m_sigma_1(:,Npts), model_ids(i,:)] = moisture_model_ext(T, q, p, m_f(i-1,:)', r(i), dt);
+    [m_sigma_1(:,Npts), model_ids(i,:)] = moisture_model_ext(T, Tk, q, p, m_f(i-1,:)', r(i), dt);
     
     % compute the prediction mean x_mean(i|i-1)
     m_pred = sum(m_sigma_1 * diag(w), 2);

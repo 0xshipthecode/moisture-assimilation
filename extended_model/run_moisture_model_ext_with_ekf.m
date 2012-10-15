@@ -14,7 +14,8 @@ N = length(t);
 T = 300;            % surface temperature, Kelvin
 q = 0.005;          % water vapor content (dimensionless)
 p = 101325;         % surface pressure, Pascals
-n_k = 1;            % number of fuel categories
+n_k = 2;            % number of fuel categories
+Tk = [10, 100]' * 3600;  % time lags for fuel categories
 Ndim = 2*n_k + 3;
 
 % external driving: rainfall characteristics
@@ -23,11 +24,11 @@ r((t > 5) .* (t < 65) > 0) = 1.1; % 2mm of rainfall form hour 5 to 65
 
 % measured moisture at given times
 obs_time = [2, 20, 50, 110, 140]';   % observation time in hours
-obs_moisture = [ 0.05;  ...
-                 0.3; ...
-                 0.7; ...
-                 0.03; ...
-                 0.032]; % measurements for the 3 fuel classes
+obs_moisture = [ 0.05,  0.045; ...
+                 0.3, 0.2; ...
+                 0.7, 0.6; ...
+                 0.03, 0.04; ...
+                 0.032, 0.035]; % measurements for the n_k fuel classes
 N_obs = length(obs_time);
 current_obs = 1;
 
@@ -70,15 +71,15 @@ for i=2:N
     dt = (t(i) - t(i-1)) * 3600;
     
     % compute & store results for system without Kalman filtering
-    m_n(i, :) = moisture_model_ext(T, q, p, m_n(i-1,:)', r(i), dt);
+    m_n(i, :) = moisture_model_ext(T, Tk, q, p, m_n(i-1,:)', r(i), dt);
 
     % KALMAN PREDICT STEP
     
     % estimate new moisture mean based on last best guess (m)
-    [m_pred, model_ids(i,:)] = moisture_model_ext(T, q, p, m_f(i-1,:)', r(i), dt);
+    [m_pred, model_ids(i,:)] = moisture_model_ext(T, Tk, q, p, m_f(i-1,:)', r(i), dt);
     
     % update covariance matrix using the tangent linear model
-    Jm = moisture_tangent_model_ext(T, q, p, m_f(i-1,:)', r(i), dt);
+    Jm = moisture_tangent_model_ext(T, Tk, q, p, m_f(i-1,:)', r(i), dt);
     sJ(i, :, :) = Jm;
     P = Jm*P*Jm' + Q;
     sP(i, :, :) = P;
@@ -99,7 +100,7 @@ for i=2:N
         trS(i) = prod(eig(S));
         
         % Kalman gain is inv(S) * P for this case (direct observation)
-        K = P * H' * inv(S);
+        K = P * H' / S;
         %trK(i) = trace(K);
         trK(i) = prod(eig(K(1:n_k,1:n_k)));
         
