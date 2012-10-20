@@ -9,20 +9,20 @@ t = (0:1:150)';
 N = length(t);
 
 % parameters of the simulation
-T = 300;            % surface temperature, Kelvin
-q = 0.005;          % water vapor content (dimensionless)
-p = 101325;         % surface pressure, Pascals
+n_loc = 4;          % number of locations
+T = 300 * ones(n_loc,1);            % surface temperature, Kelvin
+q = 0.005 * ones(n_loc,1);          % water vapor content (dimensionless)
+p = 101325 * ones(n_loc,1);         % surface pressure, Pascals
 n_k = 2;            % number of fuel categories
 Tk = [10, 100]' * 3600;  % time lags for fuel categories
-Ndim = n_k + n_k + 3;
+Ndim = n_loc * n_k + n_k + 3;
 
-
-f_type = [1,2]';
-f_loc = [1, 1]';
+f_type = [1,2,1,2,1,2,1,2]';
+f_loc = [1, 1,2,2,3,3,4,4]';
 f_info = [ f_type, f_loc ];
 
 % external driving: rainfall characteristics
-r = zeros(N,1);
+r = zeros(N,n_loc);
 r((t > 5) .* (t < 65) > 0) = 1.1; % 2mm of rainfall form hour 5 to 65
 
 % measured moisture at given times
@@ -37,7 +37,7 @@ current_obs = 1;
 
 % initialization of the Kalman filter
 m_ext = zeros(Ndim,1);
-m_ext(1:n_k) = 0.03;
+m_ext(1:n_k*n_loc) = 0.03;
 
 P = eye(Ndim) * 0.01;   % error covariance of the initial guess
 
@@ -46,8 +46,8 @@ Q = eye(Ndim) * 0.01;
 R = eye(n_k) * 0.5;
 
 % the observation operator is a n_k x Ndim matrix with I_(n_k) on the left
-H = zeros(n_k, Ndim);
-H(1:n_k,1:n_k) = eye(n_k);
+H = zeros(n_k*n_loc, Ndim);
+H(1:n_k*n_loc,1:n_k*n_loc) = eye(n_k*n_loc);
 
 % storage space for results (with filtering)
 m_f = zeros(N, Ndim);
@@ -57,7 +57,7 @@ m_n = zeros(N, Ndim); % (without filtering)
 m_n(1, :) = m_ext';
 
 % indicator of moisture model that is switched on at each time point
-model_ids = zeros(N, n_k);
+model_ids = zeros(N, n_loc*n_k);
 
 % storage for matrix traces
 trP = zeros(N, 1);
@@ -74,15 +74,15 @@ for i=2:N
     dt = (t(i) - t(i-1)) * 3600;
     
     % compute & store results for system without Kalman filtering
-    m_n(i, :) = moisture_model_ext(T, Tk, q, p, m_n(i-1,:)', f_info, r(i), dt);
+    m_n(i, :) = moisture_model_ext(T, Tk, q, p, m_n(i-1,:)', f_info, r(i,:)', dt);
 
     % KALMAN PREDICT STEP
     
     % estimate new moisture mean based on last best guess (m)
-    [m_pred, model_ids(i,:)] = moisture_model_ext(T, Tk, q, p, m_f(i-1,:)', f_info, r(i), dt);
+    [m_pred, model_ids(i,:)] = moisture_model_ext(T, Tk, q, p, m_f(i-1,:)', f_info, r(i,:)', dt);
     
     % update covariance matrix using the tangent linear model
-    Jm = moisture_tangent_model_ext(T, Tk, q, p, m_f(i-1,:)', f_info, r(i), dt);
+    Jm = moisture_tangent_model_ext(T, Tk, q, p, m_f(i-1,:)', f_info, r(i,:)', dt);
     sJ(i, :, :) = Jm;
     P = Jm*P*Jm' + Q;
     sP(i, :, :) = P;

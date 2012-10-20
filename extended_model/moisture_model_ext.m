@@ -8,22 +8,27 @@
 %
 %  This function will run the moisture model for one time step.
 %  Synopsis: 
-%            m_ext = moisture_model(T, Tk, Q, P, m_ext, r, dt)
-%
+%            m_ext = moisture_model(T, Tk, Q, P, m_ext, f_info, r, dt)
 %  Arguments:
 %
-%            T - the temperature in Kelvin
+%            T - the temperature in Kelvin [differs between spatial
+%                     locations, vector n x 1]
 %            Tk - the nominal time lags for each fuel class (seconds)
-%            Q - the water vapor content (fraction, dimensionless)
+%            Q - the water vapor content (fraction, dimensionless) [differs
+%                      between spatial locations, vector n x 1]
 %            P - the current surface atmospheric pressure (Pascals)
+%                      [differs between spatial locations, vector n x 1]
 %            m_ext - the extended state of the new moisture model, which
 %                     includes the fuel moisture (dimensionless fraction),
 %                     changes in rates (1/Tk,1/Trk - all in Hz) and target
 %                     values (Ed, Ew, S - all dimensionless fractions).
-%                     Total length is 2*k+3, where k is the no. of fuel
-%                     classes.
+%                     Total length is n*k+k+3, where k is the no. of fuel
+%                     classes and n is the number of spatial locations.
+%            f_info - the fuel type and location index for each fuel
+%                   modeled in m_ext (1st col = f_type, 2nd col = f_loc)
 %            r - the current rainfall intensity (mm/h, valid for current
-%                          time step)
+%                          time step) [differs between spatial locations,
+%                          vector n x 1]
 %            dt - the integration step [s]
 %
 %
@@ -36,70 +41,76 @@
 %                      (1 - drying, 2 - wetting, 3 - rain, 4 - dead zone)
 %
 
-function [m_ext, model_id] = moisture_model_ext(T, Tk, Q, P, m_ext, r, dt)
+function [m_ext, model_ids] = moisture_model_ext(T, Tk, Q, P, m_ext, f_info, r, dt)
 
-    k = (length(m_ext) - 3) / 2;    % number of fuel components
+    % number of fuels modelled (not necessarily at the same spatial
+    % location)
+    f_type = f_info(:,1);
+    f_loc = f_info(:,2);
+
+    k = length(Tk);                 % number of fuel classes
+    n = max(f_loc);                 % number of fuel locations 
     r0 = 0.05;                      % threshold rainfall [mm/h]
     rk = 8;                         % saturation rain intensity [mm/h]
     Trk = 14 * 3600;                % time constant for wetting model [s]
     S = 2.5;                        % saturation intensity [dimensionless]
     
+    nk = n * k;
+    
     % first, we break the state vector into components
-    m = m_ext(1:k);
-    dlt_Tk = m_ext(k+1:2*k);
-    dlt_E = m_ext(2*k+1);
-    dlt_S = m_ext(2*k+2);
-    dlt_Trk = m_ext(2*k+3);
+    m = m_ext(1:nk);
+    dlt_Tk = m_ext(nk+1:nk+k);
+    dlt_E = m_ext(nk+k+1);
+    dlt_S = m_ext(nk+k+2);
+    dlt_Trk = m_ext(nk+k+3);
 
-    % saturated vapor pressure
-    Pws = exp(54.842763 - 6763.22/T - 4.210 * log(T) + 0.000367*T + ...
-          tanh(0.0415*(T - 218.8)) * (53.878 - 1331.22/T - 9.44523 * ...
+    % saturated vapor pressure (at each location, size n x 1)
+    Pws = exp(54.842763 - 6763.22./T - 4.210 * log(T) + 0.000367*T + ...
+          tanh(0.0415*(T - 218.8)) .* (53.878 - 1331.22./T - 9.44523 * ...
           log(T) + 0.014025*T));
       
-    % water vapor pressure
-    Pw = P * Q / (0.622 + (1 - 0.622) * Q);
+    % water vapor pressure (at each location, size n x 1)
+    Pw = P .* Q ./ (0.622 + (1 - 0.622) * Q);
     
-    % relative humidity (percent)
-    H = 100 * Pw / Pws;
+    % relative humidity (percent, at each location, size n x 1)
+    H = 100 * Pw ./ Pws;
     
-    % drying/wetting fuel equilibrium moisture contents
-    Ed = 0.924*H^0.679 + 0.000499*exp(0.1*H) + 0.18*(21.1 + 273.15 - T)*(1 - exp(-0.115*H));
-    Ew = 0.618*H^0.753 + 0.000454*exp(0.1*H) + 0.18*(21.1 + 273.15 - T)*(1 - exp(-0.115*H));
+    % drying/wetting fuel equilibrium moisture contents (location specific,
+    % n x 1)
+    Ed = 0.924*H.^0.679 + 0.000499*exp(0.1*H) + 0.18*(21.1 + 273.15 - T).*(1 - exp(-0.115*H));
+    Ew = 0.618*H.^0.753 + 0.000454*exp(0.1*H) + 0.18*(21.1 + 273.15 - T).*(1 - exp(-0.115*H));
     
-    % rescale to fractions
-    % modification: extended model equilibria affected by assimilation
+    % rescale to range <0,1>, additionally add assimilated difference,
+    % which is shared across spatial locations
     Ed = Ed * 0.01 + dlt_E;
     Ew = Ew * 0.01 + dlt_E;
     
-    % if rainfall is above threshold, apply saturation model
-    if(r > r0)
+    % where rainfall is above threshold (spatially different), apply
+    % saturation model, equi and rlag are specific to fuel type and
+    % location
+    equi = m;  % copy over current equilibrium levels
+    rlag = zeros(nk,1);
+    model_ids = zeros(nk,1);
     
-        % equilibrium is equal to the saturation level
-        % modification in extended model: saturation perturbed by
-        % assimilation
-        equi = ones(size(m)) * (S + dlt_S);
-        model_id = 3 * ones(k, 1);
-        
-        % rlag is modified by the rainfall intensity
-        % modification in extended model: wetting rate perturbed by
-        % assimilation
-        rlag = ones(size(m)) * 1.0 / (Trk + dlt_Trk) * (1 - exp(- (r - r0) / rk));
+    % equilibrium is equal to the saturation level (assimilated)
+    rain_model = r(f_loc) > r0;
+    equi(rain_model) = (S + dlt_S);
+    model_ids(rain_model) = 3;
+
+    % rlag is modified by the rainfall intensity (assimilated)
+    rlag(rain_model) = 1.0 / (Trk + dlt_Trk) .* (1 - exp(- (r(f_loc(rain_model)) - r0) / rk));
     
-    else
+    % equilibrium is selected according to current moisture level
+    equi(~rain_model & equi > Ed(f_loc)) = Ed(f_loc(~rain_model & equi > Ed(f_loc)));
+    equi(~rain_model & equi < Ew(f_loc)) = Ew(f_loc(~rain_model & equi < Ew(f_loc)));
+    model_ids(~rain_model) = (m(~rain_model) > Ed(f_loc(~rain_model))) * 1 ...
+                           + (m(~rain_model) < Ew(f_loc(~rain_model))) * 2;
+    model_ids(~model_ids) = 4;
         
-        % equilibrium is selected according to current moisture level
-        % note: equilibrium is modified by data assimilation above
-        equi = m(1:k);
-        equi(equi > Ed) = Ed;
-        equi(equi < Ew) = Ew;
-        model_id = (m(1:k) > Ed) * 1 + (m(1:k) < Ew) * 2 + (m(1:k) >= Ew) .* (m(1:k) <= Ed) * 4;
-        
-        % the inverted time lag is constant according to fuel category
-        % modified model: time constants for fuels are affected by
-        % assimilation
-        rlag = 1 ./ (Tk + dlt_Tk);
-        
-    end
+    % the inverted time lag is constant according to fuel category
+    % modified model: time constants for fuels are affected by
+    % assimilation
+    rlag(~rain_model) = 1 ./ (Tk(f_type(~rain_model)) + dlt_Tk(f_type(~rain_model)));        
     
     % select appropriate integration method (small change -> big errors in
     % the standard solution)
