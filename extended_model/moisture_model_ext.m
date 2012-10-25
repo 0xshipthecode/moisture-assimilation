@@ -64,26 +64,12 @@ function [m_ext, model_ids] = moisture_model_ext(T, Tk, Q, P, m_ext, f_info, r, 
     dlt_S = m_ext(nk+k+2);
     dlt_Trk = m_ext(nk+k+3);
 
-    % saturated vapor pressure (at each location, size n x 1)
-    Pws = exp(54.842763 - 6763.22./T - 4.210 * log(T) + 0.000367*T + ...
-          tanh(0.0415*(T - 218.8)) .* (53.878 - 1331.22./T - 9.44523 * ...
-          log(T) + 0.014025*T));
-      
-    % water vapor pressure (at each location, size n x 1)
-    Pw = P .* Q ./ (0.622 + (1 - 0.622) * Q);
+    % compute equilibrium moisture using model
+    [Ed, Ew] = equilibrium_moisture(P, Q, T);
     
-    % relative humidity (percent, at each location, size n x 1)
-    H = 100 * Pw ./ Pws;
-    
-    % drying/wetting fuel equilibrium moisture contents (location specific,
-    % n x 1)
-    Ed = 0.924*H.^0.679 + 0.000499*exp(0.1*H) + 0.18*(21.1 + 273.15 - T).*(1 - exp(-0.115*H));
-    Ew = 0.618*H.^0.753 + 0.000454*exp(0.1*H) + 0.18*(21.1 + 273.15 - T).*(1 - exp(-0.115*H));
-    
-    % rescale to range <0,1>, additionally add assimilated difference,
-    % which is shared across spatial locations
-    Ed = Ed * 0.01 + dlt_E;
-    Ew = Ew * 0.01 + dlt_E;
+    % add assimilated difference, which is shared across spatial locations
+    Ed = Ed + dlt_E;
+    Ew = Ew + dlt_E;
     
     % where rainfall is above threshold (spatially different), apply
     % saturation model, equi and rlag are specific to fuel type and
