@@ -34,9 +34,31 @@ def equilibrium_moisture(P, Q, T):
     return Ed * 0.01, Ew * 0.01
     
 
+def render_field(m, lon, lat, field, title):
+    """
+    Render a geo field over the map.
+    """
+    m.drawparallels(np.arange(lat_rng[0],lat_rng[1], 0.2))
+    m.drawmeridians(np.arange(lon_rng[0],lon_rng[1], 0.2))
+    x,y = m(lon, lat)
+    m.pcolormesh(x, y, field)
+    plt.axis('equal')
+    plt.title(title)
+    plt.xlabel('Longitude [deg]');
+    plt.ylabel('Lattitude [deg]');
 
-def load_data(data_dir, data_list):
+
+def load_data():
     
+    # list of variables to load
+    data_list = { 'wrfout_d03_T2.nc' : ['T2'],
+                  'wrfout_d03_Q2.nc' : ['Q2'],
+                  'wrfout_d03_PSFC.nc' : ['PSFC'],
+                  'wrfout_d03_latlon.nc' : [ 'XLAT', 'XLONG' ],
+                  'wrfout_d03_rainnc.nc' : ['RAINNC']}
+    
+    data_dir = '../real_data'
+
     v = {}
     for fname, vlist in data_list.iteritems():
         d = netCDF4.Dataset(os.path.join(data_dir, fname))
@@ -45,41 +67,41 @@ def load_data(data_dir, data_list):
     return v
 
 
+if __name__ == '__main__':
+    
+    # we will refer to these often
+    v = load_data()
+    lat = v['XLAT'][0,:,:]
+    lon = v['XLONG'][0,:,:]
+    rain = v['RAINNC'][:,:,:]
 
-# list of variables to load
-data_list = { 'wrfout_d03_T2.nc' : ['T2'],
-              'wrfout_d03_Q2.nc' : ['Q2'],
-              'wrfout_d03_PSFC.nc' : ['PSFC'],
-              'wrfout_d03_latlon.nc' : [ 'XLAT', 'XLONG' ]}
+    # construct our basemap
+    lat_rng = (np.min(lat), np.max(lat))
+    lon_rng = (np.min(lon), np.max(lon))
+    m = Basemap(llcrnrlon=lon_rng[0],llcrnrlat=lat_rng[0],
+                urcrnrlon=lon_rng[1],urcrnrlat=lat_rng[1],
+                projection = 'mill')
+    
 
-v = load_data('../real-data', data_list)
+    # compute the equilibrium moisture on grid points
+    Ed, Ew = equilibrium_moisture(v['PSFC'][:,:,:], v['Q2'][:,:,:], v['T2'][:,:,:])
 
-# we will refer to these often
-lat = v['XLAT'][:,:,0]
-lon = v['XLONG'][:,:,0]
+    plt.ion()
+    plt.figure(figsize = (6, 12))
+        
+    for i in range(Ed.shape[0]):
+        plt.subplot(311)
+        render_field(m, lon, lat, Ed[i,:,:], 'Drying equilibrium')
+        if i == 0:
+            plt.colorbar()
+        plt.subplot(312)
+        render_field(m, lon, lat, Ew[i,:,:], 'Wetting equilibrium')
+        if i == 0:
+            plt.colorbar()
+        plt.subplot(313)
+        render_field(m, lon, lat, rain, 'Rain')
+        if i == 0:
+            plt.colorbar()
+        plt.draw()
 
-# compute the equilibrium moisture
-Ed, Ew = equilibrium_moisture(v['PSFC'][:,:,:], v['Q2'][:,:,:], v['T2'][:,:,:])
-
-# plot over basemap plots
-
-lat_rng = (np.min(lat), np.max(lat))
-lon_rng = (np.min(lon), np.max(lon))
-m = Basemap(llcrnrlon=lon_rng[0],llcrnrlat=lat_rng[0],
-            urcrnrlon=lon_rng[1],urcrnrlat=lat_rng[1],
-            projection='mill')
-m.drawcoastlines()
-m.drawparallels(np.arange(lat_rng[0],lat_rng[1], 0.1))
-m.drawmeridians(np.arange(lon_rng[0],lon_rng[1], 0.1))
-
-nx = int((m.xmax-m.xmin)/500.)+1
-ny = int((m.ymax-m.ymin)/500.)+1
-Ed0 = Ed[:, :, 0]
-m.contourf(lat, lon, Ed0, latlon = True, levels = np.linspace(np.min(Ed0), np.max(Ed0), 15))
-
-plt.figure()
-plt.imshow(Ed0)
-plt.title('Plain display')
-plt.colorbar()
-
-plt.show()
+    plt.ioff()
