@@ -9,15 +9,16 @@ from spatial_model_utilities import load_wrf_data, equilibrium_moisture, render_
 
 import numpy as np
 from mpl_toolkits.basemap import Basemap
-import matplotlib.pyplot as plt
-
+#import matplotlib.pyplot as pb
+import pylab as pb
 
 
 if __name__ == '__main__':
     
     # we will refer to these often
-    v = load_wrf_data('../real_data/california/realfire05_d03_20120409.nc')
-#    v = load_wrf_data('../real_data/witch_creek/realfire03_d02_20071021.nc')
+#    v = load_wrf_data('../real_data/california/realfire05_d03_20120409.nc')
+#    v = load_wrf_data('../real_data/witch_creek/realfire03_d03_20071021.nc')
+    v = load_wrf_data('../real_data/witch_creek/realfire03_d02_20071021.nc')
 
     # read in vars
     lat = v['XLAT'][0,:,:]
@@ -37,32 +38,31 @@ if __name__ == '__main__':
     # compute the equilibrium moisture on grid points
     Ed, Ew = equilibrium_moisture(v['PSFC'][:,:,:], Q2, v['T2'][:,:,:])
 
-    plt.ion()
-    plt.figure(figsize = (10, 6))
+    pb.ion()
+    pb.figure(figsize = (14, 7))
     for i in range(Ed.shape[0]):
-        if i > 0 and np.all(rain[i,:,:] == 0):
-            continue
 
-        plt.subplot(221)
+#        if i > 0 and np.all(rain[i,:,:] == 0):
+#            continue
+        pb.clf()
+        
+        pb.subplot(221)
         render_spatial_field(m, lon, lat, Ed[i,:,:], 'Drying equilibrium [%d]' % i)
-        plt.clim([np.min(Ed), np.max(Ed)])
-        if i == 0:
-            plt.colorbar()
-        plt.subplot(222)
+        pb.clim([np.min(Ed), np.max(Ed)])
+        pb.colorbar()
+        pb.subplot(222)
         render_spatial_field(m, lon, lat, Ew[i,:,:], 'Wetting equilibrium')
-        plt.clim([np.min(Ew), np.max(Ew)])
-        if i == 0:
-            plt.colorbar()
-        plt.subplot(223)
+        pb.clim([np.min(Ew), np.max(Ew)])
+        pb.colorbar()
+        pb.subplot(223)
         render_spatial_field(m, lon, lat, rain[i,:,:], 'Rain')
-        plt.clim([np.min(rain), np.max(rain)])
-        if i == 0:
-            plt.colorbar()
-        plt.subplot(224)
+        pb.clim([np.min(rain), np.max(rain)])
+        pb.colorbar()
+        pb.subplot(224)
         render_spatial_field(m, lon, lat, Q2[i,:,:], 'Water vapor ratio')
-        plt.clim([np.min(Q2), np.max(Q2)])
-        if i == 0:
-            plt.colorbar()
-        plt.draw()
+        pb.clim([np.min(Q2), np.max(Q2)])
+        pb.colorbar()
+        pb.draw()
+        pb.savefig('image%03d.png' % i)
 
-    plt.ioff()
+    pb.ioff()

@@ -11,87 +11,74 @@ from mpl_toolkits.basemap import Basemap
 import numpy as np
 
 
-def moisture_model_ext(T, Tk, Q, P, m_ext, f_info, r, dt):
+def moisture_model_simple(T, Tk, Q, P, m_ext, r, dt):
     """
-    Compute the next state of the distributed moisture model using environmental
-    parameters and the current state.
+    This model captures the moisture dynamics at each grid point independently.
     
     synopsis: m_ext = moisture_model_ext(T, Tk, Q, P, m_ext, f_info, r, dt)
     
-    T - temperature [Kelvins, location specific]
+    T - temperature [Kelvins]
     Tk - time delay nominal values for fuel classes
-    Q - water vapor ratio [dimensionless, location specific]
-    P - pressure [Pascals, location specific]
+    Q - water vapor ratio [dimensionless]
+    P - pressure [Pascals]
     m_ext - current moisture values and assimilated parameters
-    f_info - information on fuel type and location for each fuel
-             in m_ext
-    r - rain intensity for time unit [mm/h, location specific]
+    r - rain intensity for time unit [mm/h]
     dt - integration step [s]
     """
-    
-    # number of fuels modelled (not necessarily at the same spatial location)
-    f_type = f_info[:,0]
-    f_loc = f_info[:,1]
-
     k = Tk.shape[0]                 # number of fuel classes
-    n = f_info.shape[0] / k         # number of fuel locations 
     r0 = 0.05                       # threshold rainfall [mm/h]
     rk = 8                          # saturation rain intensity [mm/h]
     Trk = 14 * 3600                 # time constant for wetting model [s]
     S = 2.5                         # saturation intensity [dimensionless]
     
-    # number of fuel states (fuel types times number of locations)
-    nk = n * k
-    
     # first, we break the state vector into components
-    m = m_ext[:nk]
-    dlt_Tk = m_ext[nk:nk+k]
-    dlt_E = m_ext[nk+k]
-    dlt_S = m_ext[nk+k+1]
-    dlt_Trk = m_ext[nk+k+2]
+    m = m_ext[:k]
+    dlt_Tk = m_ext[k:k+k]
+    dlt_E = m_ext[2*k]
+    dlt_S = m_ext[2*k+1]
+    dlt_Trk = m_ext[2*k+2]
     
     # compute equilibrium moisture using model
-    Ed, Ew = equilibrium_moisture(P, Q, T);
+    Ed, Ew = equilibrium_moisture(P, Q, T)
     
     # add assimilated difference, which is shared across spatial locations
-    Ed = Ed + dlt_E;
-    Ew = Ew + dlt_E;
+    Ed = Ed + dlt_E
+    Ew = Ew + dlt_E
     
     # where rainfall is above threshold (spatially different), apply
     # saturation model, equi and rlag are specific to fuel type and
     # location
     equi = m.copy()         # copy over current equilibrium levels
-    rlag = np.zeros((nk,))
-    model_ids = np.zeros((nk,))
+    rlag = np.zeros((k,))
+    model_ids = np.zeros((k,))
     
     # equilibrium is equal to the saturation level (assimilated)
-    rain_model = r[f_loc] > r0
-    equi[rain_model] = S + dlt_S
-    model_ids[rain_model] = 3
+    if r > r0:
+        equi[:] = S + dlt_S
+        model_ids[:] = 3
     
-    # rlag is modified by the rainfall intensity (assimilated)
-    rlag[rain_model] = 1.0 / (Trk + dlt_Trk) * (1 - np.exp(- (r[f_loc[rain_model]] - r0) / rk))
+        # rlag is modified by the rainfall intensity (assimilated)
+        rlag = 1.0 / (Trk + dlt_Trk) * (1 - np.exp(- (r - r0) / rk))
+    else:
 
-    # equilibrium is selected according to current moisture level
-    sel = np.logical_and(np.logical_not(rain_model), equi > Ed[f_loc])
-    equi[sel] = Ed[f_loc][sel]
-    sel = np.logical_and(np.logical_not(rain_model), equi < Ew[f_loc])
-    equi[sel] = Ew[f_loc][sel]
-    notrain = np.logical_not(rain_model)
-    model_ids[notrain] = (m[notrain] > Ed[f_loc[notrain]]) * 1 + (m[notrain] < Ew[f_loc[notrain]]) * 2;
-    model_ids[model_ids == 0] = 4;
+        # equilibrium is selected according to current moisture level
+        model_ids[:] = 4
+        model_ids[equi > Ed] = 1
+        equi[equi > Ed] = Ed
+        model_ids[equi < Ew] = 2
+        equi[equi < Ew] = Ew
 
-    # the inverted time lag is constant according to fuel category
-    rlag[notrain] = 1.0 / (Tk[f_type[notrain]] + dlt_Tk[f_type[notrain]])
+        # the inverted time lag is constant according to fuel category
+        rlag = 1.0 / (Tk + dlt_Tk)
     
     # select appropriate integration method according to change for each fuel 
     # and location
     change = dt * rlag
     m_new = np.zeros_like(m_ext)
-    m_new[:nk] = np.where(change < 0.01,
+    m_new[:k] = np.where(change < 0.01,
                           m + (equi - m) * (1 - np.exp(-change)),
                           m + (equi - m) * change * (1 - 0.5 * change))
-    m_new[nk:] = m_ext[nk:]
+    m_new[k:] = m_ext[k:]
     return m_new
     
     
@@ -109,34 +96,33 @@ if __name__ == '__main__':
     
     # obtain sizes
     times = rain.shape[0]
-    locs = np.prod(lat.shape)
+    dom_shape = lat.shape
+    locs = np.prod(dom_shape)
     
     # construct initial vector
     Ed,Ew = equilibrium_moisture(P[0,:,:], Q2[0,:,:], T2[0,:,:])
-    m0l = 0.5 * (Ed + Ew)
-    domain_shape = m0l.shape
-    m0l = m0l.ravel()
     
-    # inform simulation of location & fuel type structure
-    f_info = np.zeros((3*locs,2), dtype = int)
-    f_info[:,0] = [ i % 3 for i in range(locs * 3) ]
-    f_info[:,1] = [ i // 3 for i in range(locs * 3) ]
-
-    # initialize each fuel type at each location with same value
-    m0 = m0l[f_info[:,1]]
-    
-    # construct initial extended state
-    miext = np.r_[ m0, np.zeros((6,)) ]
+    mi = np.zeros((dom_shape[0], dom_shape[1], 9))
+    mi[:, :, 0:3] = 0.5 * (Ed + Ew)
     
     # set up parameters
     Tk = np.array([1.0, 10.0, 100.0]) * 3600
     dt = 10.0 * 60
     
-    for i in range(times):
-        T_i, Q_i, P_i, r_i = T2[i,:,:], Q2[i,:,:], P[i,:,:], rain[i,:,:]
-        mi1ext = moisture_model_ext(T_i.ravel(), Tk, Q_i.ravel(), P_i.ravel(), miext, f_info, r_i.ravel(), dt)
-        miext[:] = mi1ext
+    # observation vector
+    mi1 = np.zeros_like(mi)
+    for t in range(times):
+        
+        # run the model update
+        for i in dom_shape[0]:
+            for j in dom_shape[1]:
+                T_i, Q_i, P_i, r_i = T2[t, i, j], Q2[t, i, j], P[t, i, j], rain[t, i, j]
+                mi1[i, j, :] = moisture_model_simple(T_i, Tk, Q_i, P_i, mi[i, j, :], r_i, dt)
+                
+        # if we have an observation somewhere, first krig it to the current state
+        
 
+        mi[:] = mi1[:]
 
     # construct a basemap representation of the area
     lat_rng = (np.min(lat), np.max(lat))
@@ -146,12 +132,9 @@ if __name__ == '__main__':
                 projection = 'mill')
 
     # extract values for different fuel types                
-    m1 = mi1ext[[i*3 for i in range(locs)]]
-    m1 = m1.reshape(domain_shape)
-    m2 = mi1ext[[i*3+1 for i in range(locs)]]
-    m2 = m2.reshape(domain_shape)
-    m3 = mi1ext[[i*3+1 for i in range(locs)]]
-    m3 = m3.reshape(domain_shape)
+    m1 = mi[:, :, 0]
+    m2 = mi[:, :, 1]
+    m3 = mi[:, :, 2]
     
     # also plot equilibria
     Ed, Ew = equilibrium_moisture(P[-1,:,:], Q2[-1,:,:], T2[-1,:,:])

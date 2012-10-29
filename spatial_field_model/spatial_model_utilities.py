@@ -9,6 +9,9 @@ import numpy as np
 import os.path
 import netCDF4
 import matplotlib.pyplot as plt
+import codecs
+import re
+from datetime import datetime
 
 
 def equilibrium_moisture(P, Q, T):
@@ -44,8 +47,11 @@ def render_spatial_field(m, lon, lat, field, title):
     lon_rng = (np.min(lon), np.max(lon))
     m.drawparallels(np.arange(lat_rng[0],lat_rng[1], dy))
     m.drawmeridians(np.arange(lon_rng[0],lon_rng[1], dx))
+    m.drawcoastlines()
+#    imf = m.transform_scalar(field.ravel(), lon.ravel(), lat.ravel(), lon.shape[0], lat.shape[1])
     x, y = m(lon, lat)
-    m.pcolormesh(x, y, field, alpha = 0.6)
+    m.pcolormesh(x, y, field, alpha = 0.6, edgecolor = 'none')
+#    m.imshow(imf)
     plt.axis('equal')
     plt.title(title)
 
@@ -63,3 +69,53 @@ def load_wrf_data(data_file,
         v[vname] = d.variables[vname][:,...]
     d.close()
     return v
+
+
+def load_station_data(station_file):
+    """
+    Load all available fuel moisture data from the station information.
+    """
+    f = codecs.open(station_file, 'r', encoding = 'utf-8')
+    station_data = {}
+    station_data['name'] = f.readline()
+
+    # next line is location string, not interesting    
+    f.readline()
+    
+    # next 2 lines are lattitude & longitude
+    lat_lon_re = re.compile("\D+(\d{2,3})\D+(\d{2})\D+(\d{2})")
+
+    l = f.readline()
+    mo = lat_lon_re.match(l)
+    lat_info = map(lambda x: int(x), mo.groups())
+    station_data['lat'] = lat_info[0] + lat_info[1] / 60.0 + lat_info[2] / 3600.0
+
+    l = f.readline()
+    mo = lat_lon_re.match(l)
+    lon_info = map(lambda x: int(x), mo.groups())
+    station_data['lon'] = lon_info[0] + lon_info[1] / 60.0 + lon_info[2] / 3600.0
+    
+    # read lines 5 through 14
+    for i in range(5,8):
+        f.readline()
+
+    while f:        
+
+        # read in and parse date
+        l = f.readline()
+        date = datetime.strptime(l.strip(), "%B %d, %Y")
+        
+        # read lines until a line starts with daily
+        l = f.readline()
+        while l[0] < '0' and l[0] > '9':
+            l = f.readline()
+            print l
+
+        print l
+        
+        break
+    
+    f.close()
+    
+    
+    
