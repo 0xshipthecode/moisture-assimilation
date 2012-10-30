@@ -5,12 +5,27 @@ Created on Wed Oct 24 17:40:24 2012
 @author: martin
 """
 
-from spatial_model_utilities import load_wrf_data, equilibrium_moisture, render_spatial_field
+from spatial_model_utilities import load_wrf_data, equilibrium_moisture, render_spatial_field, load_station_data
 
 import numpy as np
 from mpl_toolkits.basemap import Basemap
-#import matplotlib.pyplot as pb
+import os
 import pylab as pb
+
+station_list = [  "Julian_Moisture",
+                  "Goose_Valley_Fuel_Moisture",
+#                  "Mt Laguna_Moisture",
+                  "Oak_Grove_Moisture",
+                  "Decanso_Mositure",
+#                  "Palomar_Fuel_Moisture",
+                  "Alpine_Moisture",
+#                  "Valley_Center_Moisture",
+                  "Ranchita_Mositure",
+                  "Camp_Elliot_Moisture",
+#                  "Pine Hills_Moisture" 
+                ]
+                  
+station_data_dir = "../real_data/witch_creek/"
 
 
 if __name__ == '__main__':
@@ -20,6 +35,11 @@ if __name__ == '__main__':
 #    v = load_wrf_data('../real_data/witch_creek/realfire03_d03_20071021.nc')
     v = load_wrf_data('../real_data/witch_creek/realfire03_d02_20071021.nc')
 
+    stations = {}
+    for s in station_list:
+        print("Loading station: " + s)
+        stations[s] = load_station_data(os.path.join(station_data_dir, s))
+
     # read in vars
     lat = v['XLAT'][0,:,:]
     lon = v['XLONG'][0,:,:]
@@ -27,6 +47,7 @@ if __name__ == '__main__':
     Q2 = v['Q2']
     T2 = v['T2']
     P = v['PSFC']
+    tm = v['Times']
 
     # construct our basemap
     lat_rng = (np.min(lat), np.max(lat))
@@ -63,6 +84,7 @@ if __name__ == '__main__':
         pb.clim([np.min(Q2), np.max(Q2)])
         pb.colorbar()
         pb.draw()
+        
         pb.savefig('image%03d.png' % i)
 
     pb.ioff()

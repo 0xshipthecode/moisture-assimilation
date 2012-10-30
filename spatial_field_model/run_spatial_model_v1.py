@@ -5,11 +5,27 @@ Created on Sun Oct 28 18:14:36 2012
 @author: martin
 """
 
-from spatial_model_utilities import load_wrf_data, equilibrium_moisture, render_spatial_field
+from spatial_model_utilities import load_wrf_data, equilibrium_moisture, \
+                                    render_spatial_field, load_station_data
 import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
 import numpy as np
+import os
 
+
+station_list = [  "Julian_Moisture",
+                  "Goose_Valley_Fuel_Moisture",
+                  "Mt Laguna_Moisture",
+                  "Oak_Grove_Moisture",
+                  "Decanso_Mositure",
+                  "Palomar_Fuel_Moisture",
+                  "Alpine_Moisture",
+                  "Valley_Center_Moisture",
+                  "Ranchita_Mositure",
+                  "Camp_Elliot_Moisture",
+                  "Pine Hills_Moisture" ]
+                  
+station_data_dir = "../real_data/witch_creek/"
 
 def moisture_model_simple(T, Tk, Q, P, m_ext, r, dt):
     """
@@ -85,6 +101,11 @@ def moisture_model_simple(T, Tk, Q, P, m_ext, r, dt):
 if __name__ == '__main__':
     
     v = load_wrf_data('../real_data/witch_creek/realfire03_d02_20071021.nc')
+    
+    stations = {}
+    for s in station_list:
+        print("Loading station: " + s)
+        stations[s] = load_station_data(os.path.join(station_data_dir, s))
 
     # read in vars
     lat = v['XLAT'][0,:,:]
@@ -100,7 +121,7 @@ if __name__ == '__main__':
     locs = np.prod(dom_shape)
     
     # construct initial vector
-    Ed,Ew = equilibrium_moisture(P[0,:,:], Q2[0,:,:], T2[0,:,:])
+    Ed, Ew = equilibrium_moisture(P[0,:,:], Q2[0,:,:], T2[0,:,:])
     
     mi = np.zeros((dom_shape[0], dom_shape[1], 9))
     mi[:, :, 0:3] = 0.5 * (Ed + Ew)

@@ -11,7 +11,7 @@ import netCDF4
 import matplotlib.pyplot as plt
 import codecs
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 def equilibrium_moisture(P, Q, T):
@@ -68,6 +68,15 @@ def load_wrf_data(data_file,
     for vname in var_names:
         v[vname] = d.variables[vname][:,...]
     d.close()
+    
+    # recode times into datetime objects
+    if v.has_key('Times'):
+        t = v['Times']
+        tp = []
+        for tm in t:
+            tp.append(datetime.strptime(''.join(tm), '%Y-%m-%d_%H:%M:%S'))
+        v['Times'] = tp
+
     return v
 
 
@@ -77,7 +86,7 @@ def load_station_data(station_file):
     """
     f = codecs.open(station_file, 'r', encoding = 'utf-8')
     station_data = {}
-    station_data['name'] = f.readline()
+    station_data['name'] = f.readline().strip()
 
     # next line is location string, not interesting    
     f.readline()
@@ -93,29 +102,52 @@ def load_station_data(station_file):
     l = f.readline()
     mo = lat_lon_re.match(l)
     lon_info = map(lambda x: int(x), mo.groups())
-    station_data['lon'] = lon_info[0] + lon_info[1] / 60.0 + lon_info[2] / 3600.0
+    station_data['lon'] = -(lon_info[0] + lon_info[1] / 60.0 + lon_info[2] / 3600.0)
     
     # read lines 5 through 14
     for i in range(5,8):
         f.readline()
 
-    while f:        
+    moisture = {}
+    rh = {}
+    rain = {}
+    while True:
 
         # read in and parse date
         l = f.readline()
         date = datetime.strptime(l.strip(), "%B %d, %Y")
         
         # read lines until a line starts with daily
-        l = f.readline()
-        while l[0] < '0' and l[0] > '9':
+        while l[0] < '0' or l[0] > '9' and len(l) > 0:
             l = f.readline()
-            print l
-
-        print l
+            
+        if len(l) == 0:
+            break
         
-        break
+        while l[0] >= '0' and l[0] <= '9' and len(l) > 0:
+            fields = filter(lambda x: len(x) > 0, l.split('\t'))
+            time = datetime.strptime(fields[0], "%I %p")
+            timed = timedelta(0, time.hour * 3600)
+            mtime = date + timed
+            if len(fields) != 12:
+                print fields
+            moisture[mtime] = float(fields[6])
+            rh[mtime] = float(fields[7])
+            rain[mtime] = float(fields[11])
+            l = f.readline()
+        
+        while l[:5] != 'Daily' and len(l) > 0:
+            l = f.readline()
+            
+        if len(l) == 0:
+            break
+                
+    station_data['fuel_moisture'] = moisture
+    station_data['relative_humidity'] = rh
+    station_data['rain'] = rain
     
     f.close()
     
+    return station_data
     
     
