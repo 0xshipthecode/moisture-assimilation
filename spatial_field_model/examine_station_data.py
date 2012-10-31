@@ -6,7 +6,7 @@ import os
 from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import datetime
+from datetime import datetime, timedelta
 from matplotlib.dates import DateFormatter
 import math
 
@@ -78,6 +78,9 @@ if __name__ == '__main__':
     T2 = v['T2']
     P = v['PSFC']
     tm = v['Times']
+    
+    # adjust times to match california time
+    tm = [t - timedelta(0, 8 * 3600) for t in tm]
     
     # load stations and match then to grid points
     stations = load_stations_from_files(station_data_dir, station_list)
