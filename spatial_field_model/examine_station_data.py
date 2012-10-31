@@ -1,10 +1,15 @@
 
-from spatial_model_utilities import load_wrf_data, load_station_data, render_spatial_field, equilibrium_moisture
+from spatial_model_utilities import load_wrf_data, load_station_data, render_spatial_field, \
+                                    equilibrium_moisture, load_stations_from_files, \
+                                    match_stations_to_gridpoints, match_sample_times
 import os
 from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
+from matplotlib.dates import DateFormatter
+import math
+
 
 station_list = [  "Julian_Moisture",
                   "Goose_Valley_Fuel_Moisture",
@@ -22,31 +27,43 @@ station_list = [  "Julian_Moisture",
 station_data_dir = "../real_data/witch_creek/"
 
 
-def find_closest_grid_point(slon, slat, glon, glat):
+def match_time_series(stations, st_field_name, field, mlon, mlat, mtimes):
+    """
+    Matches the time series of the field with the values of st_field in each station in stations.
+    Returns the matched time series indexed by station name.  The field passed in has to be valid
+    for the model longitude and latitude given.
     
-    closest = np.argmin((slon - glon)**2 + (slat - glat)**2)
-    return np.unravel_index(closest, glon.shape)
-
-
-def match_times(tm1, tm2):
+        matched =  match_time_series(stations, st_field_name, field, mlon, mlat, mtimes)
+        
     """
-    Match times assuming both are sorted.
+    matched = {}
+    for s in stations.values():
+        st_fm = s[st_field_name]
+        st_times = sorted(st_fm.keys())
+        i, j = s['nearest_grid_point']
+        m_ts = field[:, i, j]
+        match_times, indx1, _ = match_sample_times(mtimes, st_times)
+        m_ts = m_ts[indx1]
+        st_ts = [ st_fm[d] for d in match_times ]
+        matched[s['name']] = (match_times, m_ts, st_ts)
+        
+    return matched
+        
+
+def great_circle_distance(lon1, lat1, lon2, lat2):
     """
-    i, j = 0, 0
-    isect = []
-    indx = []
-    while i < len(tm1) and j < len(tm2):
-        while i < len(tm1) and tm1[i] < tm2[j]:
-            i += 1
-        while j < len(tm2) and i < len(tm1) and tm1[i] > tm2[j]:
-            j += 1
-        if i < len(tm1) and j < len(tm2) and tm1[i] == tm2[j]:
-            isect.append(tm1[i])
-            indx.append(i)
-            i += 1
-            j += 1
-            
-    return isect, indx
+    Computes the great circle distance between two points given as (lon1,lat1), (lon2,lat2)
+    in kilometers.
+    
+        d = great_circle_distance(lon1, lat1, lon2, lat2)
+    """
+    rlat1, rlat2 = np.pi * lat1 / 180.0, np.pi * lat2 / 180.0
+    rlon1, rlon2 = np.pi * lon1 / 180.0, np.pi * lon2 / 180.0
+    
+    a = math.sin(0.5*(rlat1 - rlat2))**2 + math.cos(rlat1)*math.cos(rlat2)*math.sin(0.5*(rlon1 - rlon2))**2
+    c = 2 * math.atan2(a**0.5, (1-a)**0.5)
+    return 6371.0 * c
+
 
 if __name__ == '__main__':
 
@@ -62,21 +79,18 @@ if __name__ == '__main__':
     P = v['PSFC']
     tm = v['Times']
     
-    stations = {}
-    for s in station_list:
-        print("Loading station: " + s)
-        st = load_station_data(os.path.join(station_data_dir, s))
-        st['closest_gridpt'] = find_closest_grid_point(st['lon'], st['lat'], lon, lat)
-        stations[s] = st
+    # load stations and match then to grid points
+    stations = load_stations_from_files(station_data_dir, station_list)
+    match_stations_to_gridpoints(stations, lon, lat)
 
-    # construct our basemap
+    # construct basemap for rendering
     lat_rng = (np.min(lat), np.max(lat))
     lon_rng = (np.min(lon), np.max(lon))
     m = Basemap(llcrnrlon=lon_rng[0],llcrnrlat=lat_rng[0],
                 urcrnrlon=lon_rng[1],urcrnrlat=lat_rng[1],
                 projection = 'mill')
 
-    # compute the equilibrium moisture on grid points
+    # compute the equilibrium moisture on grid points (for all times t)
     Ed, Ew = equilibrium_moisture(P, Q2, T2)
 
     # show this and render stations on top
@@ -86,25 +100,36 @@ if __name__ == '__main__':
         slon, slat = st['lon'], st['lat']
         x, y = m(slon, slat)
         plt.plot(x, y, 'o', markersize = 8, markerfacecolor = 'magenta')
-        
-#    x, y = m(lon.ravel(), lat.ravel())
-#    plt.plot(x, y, 'k+', markersize = 4)
-    
-    # part B, compare values at the same time
-    plt.figure()
-    for s, ndx in zip(station_list, range(len(station_list))):
-        st = stations[s]
-        i, j = st['closest_gridpt']
-        st_fm = st['fuel_moisture']
-#        st_fm = st['rain']
-        isect, indx = match_times(tm, sorted(st_fm.keys()))
-        s_fm = [ st_fm[d] / 100.0 for d in isect ]
-        wrf_fm = [ 0.5 * (Ed[t,i,j] + Ew[t,i,j]) for t in indx ]
-#        wrf_fm = [ rain[t,i,j] for t in indx ]
 
-        plt.subplot(4,2,ndx+1)
-        plt.plot(indx, s_fm, 'ro-', indx, wrf_fm, 'gx-', linewidth = 2)
-        plt.title('%s vs. grid point (%d,%d) equilibrium' % (st['name'], i, j))
+    x, y = m(lon.ravel(), lat.ravel())
+    plt.plot(x, y, 'k+', markersize = 4)
+
+    # part B, compare values at the same times
+    for st_field_name, field in [ ('T', T2 - 273.15), ('rain', rain), ('fuel_moisture', 50.0 * (Ed + Ew))]:
+        ms_ts = match_time_series(stations, st_field_name, field, lon, lat, tm)
+
+        # extract station time series and corresponding grid point time series
+        f = plt.figure()
+        f.subplots_adjust(hspace = 1.2)
+        i = 1
+        for station_name in ms_ts.keys():
+            match_times, m_ts, st_ts = ms_ts[station_name]
+            ax = plt.subplot(4, 2, i)
+            ax.xaxis.set_major_formatter(DateFormatter('%H:%m')) 
+            plt.plot(match_times, st_ts, 'ro-', match_times, m_ts, 'gx-', linewidth = 2)
+            plt.title('%s vs. model %s' % (station_name, st_field_name))
+            for l in ax.get_xticklabels():
+                l.set_rotation(90)
+            i += 1
+        
+        
+    for s in stations.values():
+        i, j = s['nearest_grid_point']
+        mlon = lon[i, j]
+        mlat = lat[i, j]
+        print("Distance of %s from nearest grid point: %g km" 
+                % (s['name'], great_circle_distance(mlon, mlat, st['lon'], st['lat'])))
+        
         
     plt.show()
     

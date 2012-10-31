@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import codecs
 import re
 from datetime import datetime, timedelta
+import unicodedata
 
 
 def equilibrium_moisture(P, Q, T):
@@ -111,11 +112,13 @@ def load_station_data(station_file):
     moisture = {}
     rh = {}
     rain = {}
+    temp = {}
+    fuel_temp = {}
     while True:
 
         # read in and parse date
         l = f.readline()
-        date = datetime.strptime(l.strip(), "%B %d, %Y")
+        date = datetime.strptime(l.strip(), '%B %d, %Y')
         
         # read lines until a line starts with daily
         while l[0] < '0' or l[0] > '9' and len(l) > 0:
@@ -131,8 +134,10 @@ def load_station_data(station_file):
             mtime = date + timed
             if len(fields) != 12:
                 print fields
-            moisture[mtime] = float(fields[6])
-            rh[mtime] = float(fields[7])
+            temp[mtime] = float(fields[5])
+            fuel_temp[mtime] = float(fields[6])
+            moisture[mtime] = float(fields[7])
+            rh[mtime] = float(fields[8])
             rain[mtime] = float(fields[11])
             l = f.readline()
         
@@ -145,9 +150,71 @@ def load_station_data(station_file):
     station_data['fuel_moisture'] = moisture
     station_data['relative_humidity'] = rh
     station_data['rain'] = rain
+    station_data['T'] = temp
+    station_data['fuel_T'] = fuel_temp
     
     f.close()
     
     return station_data
     
+
+def find_closest_grid_point(slon, slat, glon, glat):
+    """
+    Finds the closest grid piont to the given station longitude/lattitude.
+    """
+    closest = np.argmin((slon - glon)**2 + (slat - glat)**2)
+    return np.unravel_index(closest, glon.shape)
+
+
+def match_stations_to_gridpoints(sts, lon, lat):
+    """
+    Finds the nearest grid point for each station and stores it in the station dictionary.
+    The nearest grid point is stored as the value of 'nearest_grid_point'.
+    """
+    for s in sts.values():
+        i, j = find_closest_grid_point(s['lon'], s['lat'], lon, lat)
+        s['nearest_grid_point'] = (i,j)
+        
+
+def load_stations_from_files(station_data_dir, station_list):
+    """
+    Loads station data from files given to me by AK and stores all station data
+    in a dictionary indexed by station file names.
     
+        stations = load_stations_from_files(station_data_dir, station_list)
+    
+    """
+    stations = {}
+    for s in station_list:
+        st = load_station_data(os.path.join(station_data_dir, s))
+        stations[s] = st
+
+    return stations
+
+
+def match_sample_times(tm1, tm2):
+    """
+    Match times assuming both times are sorted datetime arrays.  Returns
+    the matching times and the indices of the matching times in the first
+    and in the second array.
+    
+       isect, indx1, indx2 = match_sample_times(tm1, tm2) 
+        
+    """
+    i, j = 0, 0
+    isect = []
+    indx1 = []
+    indx2 = []
+    while i < len(tm1) and j < len(tm2):
+        while i < len(tm1) and tm1[i] < tm2[j]:
+            i += 1
+        while j < len(tm2) and i < len(tm1) and tm1[i] > tm2[j]:
+            j += 1
+        if i < len(tm1) and j < len(tm2) and tm1[i] == tm2[j]:
+            isect.append(tm1[i])
+            indx1.append(i)
+            indx2.append(j)
+            i += 1
+            j += 1
+            
+    return isect, indx1, indx2
