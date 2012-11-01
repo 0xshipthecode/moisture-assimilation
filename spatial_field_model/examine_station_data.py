@@ -90,6 +90,9 @@ if __name__ == '__main__':
     P = W['PSFC']
     tm = W.get_times()
     
+    # adjust times to match california time
+    tm = [t - timedelta(0, 8 * 3600) for t in tm]
+    
     # load stations and match then to grid points
     stations = load_stations_from_files(station_data_dir, station_list, 'US/Pacific')
     match_stations_to_gridpoints(stations, lon, lat)
