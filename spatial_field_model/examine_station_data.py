@@ -79,7 +79,8 @@ def plot_stations_vs_model_ts(stations, field_name, field, W):
 if __name__ == '__main__':
 
     # load the smallest domain
-    W = WRFModelData('../real_data/witch_creek/realfire03_d04_20071021.nc', None, 'US/Pacific')
+    W = WRFModelData('../real_data/witch_creek/realfire03_d04_20071021.nc',
+                     [ 'T2', 'PSFC', 'Q2', 'RAINNC' ], 'US/Pacific')
 
     # read in vars
     lat = W.get_lats()
@@ -89,10 +90,7 @@ if __name__ == '__main__':
     T2 = W['T2']
     P = W['PSFC']
     tm = W.get_times()
-    
-    # adjust times to match california time
-    tm = [t - timedelta(0, 8 * 3600) for t in tm]
-    
+        
     # load stations and match then to grid points
     stations = load_stations_from_files(station_data_dir, station_list, 'US/Pacific')
     match_stations_to_gridpoints(stations, lon, lat)
