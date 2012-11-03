@@ -225,3 +225,33 @@ def match_sample_times(tm1, tm2):
             j += 1
             
     return isect, indx1, indx2
+
+
+def match_time_series(stations, st_field_name, field, W):
+    """
+    Matches the time series of the field with the values of st_field in each station in stations.
+    Returns the matched time series indexed by station name.  The field must be located on the same
+    grid points and times as the WRF model data in W.
+    
+        matched =  match_time_series(stations, st_field_name, field, W)
+        
+    matched is a dictionary indexed by station name with tuple values
+    (match_times, model_ts, station_ts, dist_to_nearest_grid_point, index_of_nearest_grid_point). 
+    """
+    mlon = W.get_lons()
+    mlat = W.get_lats()
+    mtimes = W.get_times()
+    
+    matched = {}
+    for st_name in stations:
+        s = stations[st_name]
+        st_data = s[st_field_name]
+        st_times = sorted(st_data.keys())
+        i, j = s['nearest_grid_point']
+        m_ts = field[:, i, j]
+        match_times, indx1, _ = match_sample_times(mtimes, st_times)
+        m_ts = m_ts[indx1]
+        st_ts = [ st_data[d] for d in match_times ]
+        matched[st_name] = { 't' : match_times, 'model_ts' : m_ts, 'station_ts' : st_ts, 'name' : st_name }
+        
+    return matched

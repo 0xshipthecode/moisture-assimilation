@@ -65,7 +65,8 @@ def plot_stations_vs_model_ts(stations, field_name, field, W):
     f.subplots_adjust(hspace = 1.2)
     i = 1
     for station_name in ms_ts.keys():
-        match_times, m_ts, st_ts, _ = ms_ts[station_name]
+        mr = ms_ts[station_name]
+        match_times, m_ts, st_ts = mr['t'], mr['model_ts'], ['station_ts']
         ax = plt.subplot(4, 2, i)
         ax.xaxis.set_major_formatter(DateFormatter('%H:%m')) 
         plt.plot(match_times, st_ts, 'ro-', match_times, m_ts, 'gx-', linewidth = 2)

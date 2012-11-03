@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import os
 import numpy as np
 
+
+
 class WRFModelData:
     """
     This class contains aggregate information loaded from a WRF model, methods for loading data from a WRF simulation
