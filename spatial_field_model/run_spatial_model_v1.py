@@ -151,7 +151,7 @@ def build_observation_data(stations, W):
 
 if __name__ == '__main__':
     
-    W = WRFModelData('../real_data/witch_creek/realfire03_d02_20071021.nc')
+    W = WRFModelData('../real_data/witch_creek/realfire03_d03_20071022.nc')
     
     # read in vars
     lat, lon = W.get_lats(), W.get_lons()
@@ -220,23 +220,23 @@ if __name__ == '__main__':
         plt.clf()
         plt.subplot(2,3,1)
         render_spatial_field(m, lon, lat, f[:,:,0], 'Fast fuel')
-#        plt.clim([0.0, 0.1])
+        plt.clim([0.0, 0.5])
         plt.colorbar()
         plt.subplot(2,3,2)
         render_spatial_field(m, lon, lat, f[:,:,1], 'Mid fuel')
-#        plt.clim([0.0, 0.1])        
+        plt.clim([0.0, 0.5])        
         plt.colorbar()
         plt.subplot(2,3,3)
         render_spatial_field(m, lon, lat, f[:,:,2], 'Slow fuel')
-#        plt.clim([0.0, 0.1])        
+        plt.clim([0.0, 0.5])        
         plt.colorbar()
         plt.subplot(2,3,4)
         render_spatial_field(m, lon, lat, E, 'Equilibrium')
-#        plt.clim([0.0, 0.1])        
+        plt.clim([0.0, 0.5])        
         plt.colorbar()
         plt.subplot(2,3,5)
         render_spatial_field(m, lon, lat, rain[t,:,:], 'Rain')
-#        plt.clim([0.0, 0.1])        
+        plt.clim([0.0, 0.5])        
         plt.colorbar()
         plt.subplot(2,3,6)
         render_spatial_field(m, lon, lat, T2[t,:,:] - 273.15, 'Temperature')
