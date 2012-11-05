@@ -130,7 +130,7 @@ def load_station_data(station_file, tz):
                 print fields
             temp[mtime] = float(fields[5])
             fuel_temp[mtime] = float(fields[6])
-            moisture[mtime] = float(fields[7])
+            moisture[mtime] = float(fields[7]) / 100.0
             rh[mtime] = float(fields[8])
             rain[mtime] = float(fields[11])
             l = f.readline()

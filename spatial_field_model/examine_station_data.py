@@ -1,8 +1,8 @@
 
 from spatial_model_utilities import load_station_data, render_spatial_field, \
                                     equilibrium_moisture, load_stations_from_files, \
-                                    match_stations_to_gridpoints, match_sample_times, \
-                                    great_circle_distance
+                                    match_stations_to_gridpoints, \
+                                    great_circle_distance, match_time_series
                                     
 from wrf_model_data import WRFModelData
 
@@ -28,34 +28,6 @@ station_list = [  "Julian_Moisture",
 station_data_dir = "../real_data/witch_creek/"
 
 
-def match_time_series(stations, st_field_name, field, W):
-    """
-    Matches the time series of the field with the values of st_field in each station in stations.
-    Returns the matched time series indexed by station name.  The field must be located on the same
-    grid points and times as the WRF model data in W.
-    
-        matched =  match_time_series(stations, st_field_name, field, W)
-        
-    """
-    mlon = W.get_lons()
-    mlat = W.get_lats()
-    mtimes = W.get_times()
-    
-    matched = {}
-    for st_name in stations:
-        s = stations[st_name]
-        st_data = s[st_field_name]
-        st_times = sorted(st_data.keys())
-        i, j = s['nearest_grid_point']
-        m_ts = field[:, i, j]
-        match_times, indx1, _ = match_sample_times(mtimes, st_times)
-        m_ts = m_ts[indx1]
-        st_ts = [ st_data[d] for d in match_times ]
-        matched[st_name] = (match_times, m_ts, st_ts, great_circle_distance(mlon[i,j], mlat[i,j], s['lon'], s['lat']))
-        
-    return matched
-
-
 def plot_stations_vs_model_ts(stations, field_name, field, W):
     
     ms_ts = match_time_series(stations, st_field_name, field, W)
@@ -66,7 +38,7 @@ def plot_stations_vs_model_ts(stations, field_name, field, W):
     i = 1
     for station_name in ms_ts.keys():
         mr = ms_ts[station_name]
-        match_times, m_ts, st_ts = mr['t'], mr['model_ts'], ['station_ts']
+        match_times, m_ts, st_ts = mr['t'], mr['model_ts'], mr['station_ts']
         ax = plt.subplot(4, 2, i)
         ax.xaxis.set_major_formatter(DateFormatter('%H:%m')) 
         plt.plot(match_times, st_ts, 'ro-', match_times, m_ts, 'gx-', linewidth = 2)
@@ -118,7 +90,7 @@ if __name__ == '__main__':
     plt.plot(x, y, 'k+', markersize = 4)
 
     # part B, compare values at the same times
-    for st_field_name, field in [ ('T', T2 - 273.15), ('fuel_moisture', 50.0 * (Ed + Ew))]:
+    for st_field_name, field in [ ('T', T2 - 273.15), ('fuel_moisture', 0.5 * (Ed + Ew))]:
         plot_stations_vs_model_ts(stations, st_field_name, field, W)
         
     # examine fuel moisture residuals
@@ -129,10 +101,14 @@ if __name__ == '__main__':
     stat_data = []
     weights = []
     for s in fm_ts.keys():
-        _, mts, stts, d = fm_ts[s]
+        mts, stts = fm_ts[s]['model_ts'], fm_ts[s]['station_ts']
+        stinfo = stations[s]
+        ngp = stinfo['nearest_grid_point']
         model_data.extend(mts)
         stat_data.extend(stts)
-        weights.extend([1.0 / d for i in range(len(mts))])
+        d = great_circle_distance(stinfo['lon'], stinfo['lat'], lon[ngp], lat[ngp])
+#        weights.extend([1.0 / d for i in range(len(mts))])
+        weights.extend([1.0 for i in range(len(mts))])
         
     mdata = np.array(model_data)
     sdata = np.array(stat_data)
@@ -143,14 +119,13 @@ if __name__ == '__main__':
     print("Weighted lin. regression parameter is %g." % beta)
     
     # plot fitted model
-    plot_stations_vs_model_ts(stations, 'fuel_moisture', beta * 50 * (Ed + Ew), W)
+    plot_stations_vs_model_ts(stations, 'fuel_moisture', beta * 0.5 * (Ed + Ew), W)
     
     # now get all the residuals of the fit in each station
     sres = {}
     for s in fm_ts:
-        print s
         st = stations[s]
-        _, mts, stts, _ = fm_ts[s]
+        mts, stts = fm_ts[s]['model_ts'], fm_ts[s]['station_ts']
         sres[s] = (np.array(stts) - beta * np.array(mts), st['lon'], st['lat'])
 
     # **********************************************************************************

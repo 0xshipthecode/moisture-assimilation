@@ -3,6 +3,7 @@ import numpy as np
 
 from spatial_model_utilities import equilibrium_moisture
 
+
 class CellMoistureModel:
 
     Tk = np.array([1, 10, 100]) * 3600.0    # nominal fuel delays
@@ -25,19 +26,20 @@ class CellMoistureModel:
         self.t = 0.0
         self.model_ids = np.zeros((k,))
         self.m_new = np.zeros((k,))
+        self.rlag = np.zeros((k,))
+        self.equi = np.zeros((k,))
         
         # state covariance matrix
-        self.P = np.eye(2*k+3) * 0.1 if P0 is None else P0.copy()
+        self.P = np.eye(2*k+3) * 0.02 if P0 is None else P0.copy()
         self.H = np.zeros((2*k+3,))
         
 
-    def advance_model(self, T, Q, P, r, dt, mQ = None):
+    def advance_model(self, Ed, Ew, r, dt, mQ = None):
         """
         This model captures the moisture dynamics at each grid point independently.
-        
-        T - temperature [Kelvins]
-        Q - water vapor ratio [dimensionless]
-        P - pressure [Pascals]
+
+        Ed - drying equilibrium
+        Ew - wetting equilibrium
         r - rain intensity for time unit [mm/h]
         dt - integration step [s]
         """
@@ -46,13 +48,10 @@ class CellMoistureModel:
         
         # first, we break the state vector into components
         m = self.m_ext[:k]
-        dlt_Tk = self.m_ext[k:k+k]
+        dlt_Tk = self.m_ext[k:2*k]
         dlt_E = self.m_ext[2*k]
         dlt_S = self.m_ext[2*k+1]
         dlt_Trk = self.m_ext[2*k+2]
-        
-        # compute equilibrium moisture using model
-        Ed, Ew = equilibrium_moisture(P, Q, T)
         
         # add assimilated difference, which is shared across spatial locations
         Ed = Ed + dlt_E
@@ -61,24 +60,26 @@ class CellMoistureModel:
         # where rainfall is above threshold (spatially different), apply
         # saturation model, equi and rlag are specific to fuel type and
         # location
-        equi = m.copy()         # copy over current equilibrium levels
-        rlag = np.zeros((k,))
-        model_ids = np.zeros((k,))
+        equi = self.equi
+        equi[:] = m[:]
+        rlag = self.rlag
+        rlag[:] = 0.0 
+        model_ids = self.model_ids
+        model_ids[:] = 0
         
         # equilibrium is equal to the saturation level (assimilated)
         if r > self.r0:
             equi[:] = self.S + dlt_S
-            self.model_ids[:] = 3
+            model_ids[:] = 3
         
             # rlag is modified by the rainfall intensity (assimilated)
             rlag[:] = 1.0 / (self.Trk + dlt_Trk) * (1 - np.exp(- (r - self.r0) / self.rk))
         else:
-    
             # equilibrium is selected according to current moisture level
-            self.model_ids[:] = 4
-            self.model_ids[equi > Ed] = 1
+            model_ids[:] = 4
+            model_ids[equi > Ed] = 1
             equi[equi > Ed] = Ed
-            self.model_ids[equi < Ew] = 2
+            model_ids[equi < Ew] = 2
             equi[equi < Ew] = Ew
     
             # the inverted time lag is constant according to fuel category
@@ -92,16 +93,73 @@ class CellMoistureModel:
                          m + (equi - m) * (1 - np.exp(-change)),
                          m + (equi - m) * change * (1 - 0.5 * change))
         
-        # update model state covariance if requested using the old state
+        # update model state covariance if requested using the old state (the jacobian must be computed as well)
         if mQ is not None:
-            J = self.compute_jacobian(P, Q, T, r, dt)
+            J = np.zeros((2*k+3,2*k+3))
+            for i in range(k):
+            
+                if change[i] < 0.01:
+                    
+                    # partial m_i/partial m_i
+                    J[i,i] = np.exp(-change[i])
+                    
+                    # precompute partial m_i/partial change
+                    dmi_dchng = (equi[i] - m[i]) * np.exp(-change[i])
+                    
+                    # precompute partial m_i/partial equi
+                    dmi_dequi = (1.0 - np.exp(-change[i]))
+        
+                else:
+                    
+                    # partial dm_i/partial m_i
+                    J[i,i] = 1.0 - change[i] * (1 - 0.5 * change[i])
+                    
+                    # partial m_i/partial change
+                    dmi_dchng = (equi[i] - m[i]) * (1.0 - change[i])
+                    
+                    # partial m_i/partial equi
+                    dmi_dequi = change[i] * (1 - 0.5 * change[i])
+                                
+            
+                # branch according to the currently active model
+                if r <= self.r0:
+                    
+                    # drying/wetting model active
+        
+                    # partial m_i/partial delta_Tk
+                    J[i,k+i] = dmi_dchng * (-dt) * (Tk[i] + dlt_Tk[i])**(-2)
+        
+                    # if drying/wetting model active, jacobian entry w.r.t. equilibrium is nonzero
+                    # it is zero if the 'dead zone' model is active
+                    if model_ids[i] < 4:
+                        J[i, 2*k] = dmi_dequi
+        
+                else:
+        
+                    # rain model active
+        
+                    # partial m_i/partial deltaS
+                    J[i,2*k+1] = dmi_dequi
+        
+                    # partial m_i/partial deltaTkr
+                    J[i,2*k+2] = dmi_dchng * dt * (np.exp(-(r - self.r0)/self.rk) - 1.0) * (self.Trk + dlt_Trk)**(-2)
+        
+            
+                # delta_Tk for each fuel have no dependencies except previous delta_Tk
+                J[k+i,k+i] = 1.0;        
+        
+            # the equilibrium constants
+            J[2*k,2*k] = 1.0 
+            J[2*k+1,2*k+1] = 1.0 
+            J[2*k+2,2*k+2] = 1.0
+
             self.P = np.dot(np.dot(J, self.P), J.T) + mQ
 
         # update to the new state
         self.m_ext[:3] = m_new
         
         
-    def compute_jacobian(self, P, Q, T, r, dt):
+    def compute_jacobian(self, Ed, Ew, r, dt):
         """
         Compute the jacobian at the current state and return it.
         """
@@ -114,9 +172,6 @@ class CellMoistureModel:
         dlt_E = self.m_ext[2*k]
         dlt_S = self.m_ext[2*k+1]
         dlt_Trk = self.m_ext[2*k+2]
-        
-        # compute equilibrium moisture using model
-        Ed, Ew = equilibrium_moisture(P, Q, T)
         
         # add assimilated difference, which is shared across spatial locations
         Ed = Ed + dlt_E
@@ -239,3 +294,5 @@ class CellMoistureModel:
         # update state and state covariance
         self.m_ext += K * (obs_val - self.m_ext[fuel_type])
         P -= np.dot(np.dot(K, H), P) 
+
+        return K[fuel_type]
