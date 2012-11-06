@@ -107,8 +107,8 @@ if __name__ == '__main__':
         model_data.extend(mts)
         stat_data.extend(stts)
         d = great_circle_distance(stinfo['lon'], stinfo['lat'], lon[ngp], lat[ngp])
-#        weights.extend([1.0 / d for i in range(len(mts))])
-        weights.extend([1.0 for i in range(len(mts))])
+        weights.extend([1.0 / d for i in range(len(mts))])
+#        weights.extend([1.0 for i in range(len(mts))])
         
     mdata = np.array(model_data)
     sdata = np.array(stat_data)

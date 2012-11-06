@@ -7,6 +7,8 @@ Created on Sun Oct 28 18:14:36 2012
 
 from spatial_model_utilities import render_spatial_field, equilibrium_moisture, load_stations_from_files, \
                                     match_stations_to_gridpoints, match_sample_times, great_circle_distance
+                                    
+from kriging_methods import simple_kriging_data_to_model
 
 from wrf_model_data import WRFModelData
 from cell_model import CellMoistureModel
@@ -37,89 +39,6 @@ station_list = [  "Julian_Moisture",
 
                   
 station_data_dir = "../real_data/witch_creek/"
-
-
-def construct_correlation_matrix(gridndx, mlons, mlats):
-    """
-    Construct a distance-based correlation matrix between residuals at given longitudes
-    and lattitudes.
-    """
-    N = len(gridndx)
-    D = np.zeros((N,N))
-    
-    # compute distances in km between locations
-    for (i,j), i1 in zip(gridndx, range(N)):
-        lon1, lat1 = mlons[i,j], mlats[i,j]
-        for (k,l), i2 in zip(gridndx, range(N)):
-            if i1 != i2:
-                lon2, lat2 = mlons[k,l], mlats[k,l]
-                D[i1,i2] = great_circle_distance(lon1, lat1, lon2, lat2)
-            
-    # estimate correlation coeff
-    return np.maximum(np.eye(N), 0.8565 - 0.0063 * D)
-
-
-def simple_kriging_data_to_model(obs_data, W, mS, t):
-    """
-    Simple kriging of data points to model points.  The kriging results in
-    the matrix K, which contains mean of the kriged observations and the
-    matrix V, which contains the kriging variance. 
-    
-        synopsis: K, V = simple_kriging_data_to_model(obs_data, W, t)
-        
-    """
-    mlons, mlats = W.get_lons(), W.get_lats()
-    P, Q, T = W['PSFC'][t,:,:], W['Q2'][t,:,:], W['T2'][t,:,:] 
-    K = np.zeros_like(mlons)
-    V = np.zeros_like(mlons)
-    Nobs = len(obs_data)
-    fm_obs = np.zeros((Nobs,))
-    fm_stds = np.zeros((Nobs,))
-    station_lonlat = []
-        
-    # accumulate the indices of the nearest grid points
-    ndx = 0
-    gridndx = []
-    for mr in obs_data.values():
-        fm_obsi, grid_pos, lonlat, fmres_std = mr['fm_obs'], mr['nearest_grid_point'], mr['lonlat'], mr['fm_std']
-        gridndx.append(grid_pos)
-        fm_obs[ndx] = fm_obsi
-        fm_stds[ndx] = fmres_std
-        station_lonlat.append(lonlat)
-        ndx += 1
-        
-    # compute nominal state for grid points
-    Ed, Ew = equilibrium_moisture(P, Q, T)
-    mu_mod = 0.899022 * 0.5 * (Ed + Ew)
-
-    # compute nominal state for station data
-    mu_obs = np.zeros((Nobs,))
-    for g, i in zip(gridndx, range(Nobs)):
-        mu_obs[i] = mu_mod[g]
-
-    # compute observation residuals (using model fit from examine_station_data)
-    res_obs = fm_obs - mu_obs
-    
-    # construct the covariance matrix and invert it
-    C = construct_correlation_matrix(gridndx, mlons, mlats)
-    oS = np.diag(fm_stds)
-    Sigma = np.dot(np.dot(oS, C), oS)
-    SigInv = np.linalg.inv(Sigma)
-    
-    # run the kriging estimator for each model grid point
-    K = np.zeros_like(mlats)
-    cov = np.zeros_like(mu_obs)
-    for p in np.ndindex(K.shape):
-        # compute the covariance array anew for each grid point
-        for k in range(Nobs):
-            lon, lat = station_lonlat[k]
-            cc = max(0.8565 - 0.0063 * great_circle_distance(mlons[p], mlats[p], lon, lat), 0.0)
-            cov[k] = mS[p] * cc * fm_stds[k]
-        csi = np.dot(cov, SigInv)
-        K[p] = mu_mod[p] + np.dot(csi, res_obs) 
-        V[p] = mS[p]**2 - np.dot(csi, cov)
-    
-    return K, V
 
 
 def build_observation_data(stations, W):
@@ -158,6 +77,47 @@ def advance_cell_model(x):
     model.advance_model(Ed, Ew, r, dt, Qij)
     return (pos, model)
 
+
+class OnlineVarianceEstimator:
+    """
+    This class keeps an estimate of the running mean and variance of a field.
+    Online algorithm taken from wikipedia [attributed to D. Knuth]
+    http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+    """
+    
+    def __init__(self, imean, ivar, iN):
+        """
+        Initialize with prior information.  
+        """
+        self.mean = imean
+        self.M2 = ivar
+        self.N = iN
+        
+
+    def update_with(self, ndata):
+        """
+        Acquire new sample and update the field statistics.
+        """
+        self.N += 1
+        delta = ndata - self.mean
+        self.mean += delta / self.N
+        self.M2 += delta * (ndata - self.mean)
+         
+         
+    def get_variance(self):
+        """
+        Return the current variance estimate.
+        """
+        return self.M2 / (self.N - 1)
+    
+    def get_mean(self):
+        """
+        Returns the estimate of the current mean.
+        """
+        return self.mean
+        
+
+
 def run_module():
         
     W = WRFModelData('../real_data/witch_creek/realfire03_d04_20071022.nc')
@@ -187,19 +147,21 @@ def run_module():
     E = 0.5 * (Ed + Ew)
     
     # set up parameters
-    mS = np.zeros_like(E)
-    Qij = np.eye(9) * 0.001
+    Qij = np.eye(9) * 0.005
     dt = 10.0 * 60
     K = np.zeros_like(E)
     V = np.zeros_like(E)
+    mV = np.zeros_like(E)
     Kg = np.zeros_like(E)
+    
+    # moisture state - equilibrium residual variance
+    mre = OnlineVarianceEstimator(np.zeros_like(E), np.ones_like(E) * 0.02, 1)
 
     # construct model grid using standard fuel parameters
     Tk = np.array([1.0, 10.0, 100.0]) * 3600
     models = np.zeros(dom_shape, dtype = np.object)
     for pos in np.ndindex(dom_shape): 
         models[pos] = CellMoistureModel((lat[pos], lon[pos]), 3, E[pos], Tk, P0 = Qij)
-    
     
     # construct a basemap representation of the area
     lat_rng = (np.min(lat), np.max(lat))
@@ -211,21 +173,28 @@ def run_module():
     plt.figure(figsize = (10, 6))
     
     # run model
-    for t in range(1, Nt):
+    for t in range(2, Nt):
         model_time = W.get_times()[t]
         print("Time: %s, step: %d" % (str(model_time), t))
 
         # pre-compute equilibrium moisture to save a lot of time
         Ed, Ew = equilibrium_moisture(P[t,:,:], Q2[t,:,:], T2[t,:,:])
+        E = 0.5 * (Ed + Ew)
         
         # run the model update (use multiprocessing)
         for pos in np.ndindex(dom_shape):
             i, j = pos
             models[pos].advance_model(Ed[i, j], Ew[i, j], rain[t, i, j], dt, Qij)
             
-        # gather the standard deviations of the moisture fuel of the observed type from the model
-        for pos in np.ndindex(dom_shape):
-            mS[pos] = models[pos].P[1,1]**0.5
+        # prepare visualization data        
+        f = np.zeros((dom_shape[0], dom_shape[1], 3))
+        for p in np.ndindex(dom_shape):
+            f[p[0], p[1], :] = models[p].get_state()[:3]
+            mV[pos] = models[p].P[1,1]
+
+        # update the model residual estimator and get current best estimate of variance
+        mre.update_with(f[:,:,1] - E * 0.899022)
+        mresV = mre.get_variance()
 
         # if we have an observation somewhere in time
         doing_kalman_update = False
@@ -233,13 +202,12 @@ def run_module():
             doing_kalman_update = True
             
             # krige data to observations
-            K, V = simple_kriging_data_to_model(obs_data[model_time], W, mS, t)
+            K, V = simple_kriging_data_to_model(obs_data[model_time], E, W, mresV ** 0.5, t)
 
             # run the kalman update in each model
             # gather the standard deviations of the moisture fuel after the Kalman update
             for pos in np.ndindex(dom_shape):
                 Kg[pos] = models[pos].kalman_update(K[pos], V[pos], 1)
-                mS[pos] = models[pos].P[1,1]
 
         # prepare visualization data        
         f = np.zeros((dom_shape[0], dom_shape[1], 3))
@@ -262,7 +230,7 @@ def run_module():
         plt.colorbar()
         plt.subplot(3,3,4)
         render_spatial_field(m, lon, lat, E, 'Equilibrium')
-        plt.clim([0.0, 0.5])        
+        plt.clim([0.0, 0.2])        
         plt.colorbar()
         plt.subplot(3,3,5)
 #        render_spatial_field(m, lon, lat, rain[t,:,:], 'Rain')
@@ -270,18 +238,19 @@ def run_module():
         plt.clim([0.0, 1.0])        
         plt.colorbar()
         plt.subplot(3,3,6)
-        render_spatial_field(m, lon, lat, T2[t,:,:] - 273.15, 'Temperature')
+        render_spatial_field(m, lon, lat, mV, 'Mid fuel variance')
+        plt.clim([0.0, np.max(mV)]) 
         plt.colorbar()
         plt.subplot(3,3,7)
         render_spatial_field(m, lon, lat, K, 'Kriged observations')
         plt.colorbar()
         plt.subplot(3,3,8)
         render_spatial_field(m, lon, lat, V, 'Kriging variance')
-        plt.clim([0.0, np.max(V)])
+        plt.clim([np.min(V), np.max(V)])
         plt.colorbar()
         plt.subplot(3,3,9)
-        render_spatial_field(m, lon, lat, mS, 'Model variance')
-        plt.clim([0.0, np.max(mS)])
+        render_spatial_field(m, lon, lat, mresV, 'Model res. variance')
+        plt.clim([0.0, np.max(mresV)])
         plt.colorbar()
         
         plt.savefig('model_outputs/moisture_model_t%03d.png' % t) 
