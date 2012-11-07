@@ -5,8 +5,8 @@ Created on Sun Oct 28 18:14:36 2012
 @author: martin
 """
 
-from spatial_model_utilities import render_spatial_field, equilibrium_moisture, load_stations_from_files, \
-                                    match_stations_to_gridpoints, match_sample_times, great_circle_distance
+from spatial_model_utilities import render_spatial_field, great_circle_distance
+from time_series_utilities import build_observation_data
                                     
 from kriging_methods import simple_kriging_data_to_model
 
@@ -18,65 +18,20 @@ from mpl_toolkits.basemap import Basemap
 import numpy as np
 import os
 
-#import profile
-#import pstats
-
-import multiprocessing
-
 
 station_list = [  "Julian_Moisture",
                   "Goose_Valley_Fuel_Moisture",
-#                  "Mt Laguna_Moisture",
                   "Oak_Grove_Moisture",
                   "Decanso_Moisture",
-#                  "Palomar_Fuel_Moisture",
                   "Alpine_Moisture",
-#                  "Valley_Center_Moisture",
                   "Ranchita_Moisture",
-                  "Camp_Elliot_Moisture",
-#                  "Pine Hills_Moisture" 
+                  "Camp_Elliot_Moisture"
                 ]
 
                   
 station_data_dir = "../real_data/witch_creek/"
 
-
-def build_observation_data(stations, W):
-    """
-    Repackage the matched time series into a time-indexed structure which gives details on the observed data and active observation stations.
     
-        synopsis: obs_data = build_observation_data(stations, fm_ts)
-        
-    """
-    Ns = len(stations)
-    
-    # iterate over time instants and accumulate them into observation packets
-    obs_data = {}
-    for sname, s in stations.iteritems():
-        i, j = s['nearest_grid_point']
-        mtm, ndx1, _ = match_sample_times(W.get_times(), sorted(s['fuel_moisture'].keys()))
-        Ed, Ew = equilibrium_moisture(W['PSFC'][ndx1, i, j], W['Q2'][ndx1, i, j], W['T2'][ndx1, i, j])
-        fm_equi = 0.899022 * 0.5 * (Ed + Ew)
-        fm_st = [ s['fuel_moisture'][t] for t in mtm ]
-        fm_std = np.std(fm_st - fm_equi) # estimate the standard deviation of the residuals
-        for tm, obs in  zip(mtm, fm_st):
-            obs_i = obs_data[tm] if tm in obs_data else {}
-            obs_s = { 'fm_obs' : obs,
-                      'fm_std' : fm_std,
-                      'nearest_grid_point' : (i,j),
-                      'lonlat' : (s['lon'], s['lat']),
-                      'name' : sname }
-            obs_i[sname] = obs_s
-            obs_data[tm] = obs_i
-            
-    return obs_data
-    
-    
-def advance_cell_model(x):
-    model, pos, Ed, Ew, r, dt, Qij = x
-    model.advance_model(Ed, Ew, r, dt, Qij)
-    return (pos, model)
-
 
 class OnlineVarianceEstimator:
     """
@@ -110,6 +65,7 @@ class OnlineVarianceEstimator:
         """
         return self.M2 / (self.N - 1)
     
+
     def get_mean(self):
         """
         Returns the estimate of the current mean.
@@ -120,31 +76,27 @@ class OnlineVarianceEstimator:
 
 def run_module():
         
-    W = WRFModelData('../real_data/witch_creek/realfire03_d04_20071022.nc')
+    wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04_20071022.nc')
     
     # read in vars
-    lat, lon = W.get_lats(), W.get_lons()
-    tm = W.get_times()
-    rain = W['RAINNC']
-    Q2 = W['Q2']
-    T2 = W['T2']
-    P = W['PSFC']
+    lat, lon = wrf_data.get_lats(), wrf_data.get_lons()
+    tm = wrf_data.get_times()
+    rain = wrf_data['RAINNC']
+    Ed, Ew = wrf_data.get_moisture_equilibria()
     
     # obtain sizes
     Nt = rain.shape[0]
     dom_shape = lat.shape
-    locs = np.prod(dom_shape)
     
-    # load station data
-    stations = load_stations_from_files(station_data_dir, station_list, 'US/Pacific')
-    match_stations_to_gridpoints(stations, lon, lat)
+    # load station data from files
+    tz = pytz.timezone('US/Pacific')
+    stations = [Station(os.path.join(station_data_dir, s), tz, wrf_data) for s in station_list]
     
-    # manipulate observation data into a time indexed structure
-    obs_data = build_observation_data(stations, W) 
+    # build the observation data structure indexed by time
+    obs_data = build_observation_data(stations, wrf_data)
     
-    # construct initial vector
-    Ed, Ew = equilibrium_moisture(P[1,:,:], Q2[1,:,:], T2[1,:,:])
-    E = 0.5 * (Ed + Ew)
+    # construct initial conditions
+    E = 0.5 * (Ed[1,:,:] + Ew[1,:,:])
     
     # set up parameters
     Qij = np.eye(9) * 0.005
@@ -156,6 +108,7 @@ def run_module():
     
     # moisture state - equilibrium residual variance
     mre = OnlineVarianceEstimator(np.zeros_like(E), np.ones_like(E) * 0.02, 1)
+    mfm = MeanFieldModel()
 
     # construct model grid using standard fuel parameters
     Tk = np.array([1.0, 10.0, 100.0]) * 3600
@@ -174,14 +127,13 @@ def run_module():
     
     # run model
     for t in range(2, Nt):
-        model_time = W.get_times()[t]
+        model_time = wrf_data.get_times()[t]
         print("Time: %s, step: %d" % (str(model_time), t))
 
         # pre-compute equilibrium moisture to save a lot of time
-        Ed, Ew = equilibrium_moisture(P[t,:,:], Q2[t,:,:], T2[t,:,:])
-        E = 0.5 * (Ed + Ew)
+        E = 0.5 * (Ed[t,:,:] + Ew[t,:,:])
         
-        # run the model update (use multiprocessing)
+        # run the model update
         for pos in np.ndindex(dom_shape):
             i, j = pos
             models[pos].advance_model(Ed[i, j], Ew[i, j], rain[t, i, j], dt, Qij)
@@ -192,17 +144,19 @@ def run_module():
             f[p[0], p[1], :] = models[p].get_state()[:3]
             mV[pos] = models[p].P[1,1]
 
+        # check if we are to update the mean field model first
+        if model_time in obs_data:
+            mfm.fit(E, obs_data[model_time])
+            
         # update the model residual estimator and get current best estimate of variance
-        mre.update_with(f[:,:,1] - E * 0.899022)
+        mre.update_with(f[:,:,1] - mfm.predict_field())
         mresV = mre.get_variance()
 
         # if we have an observation somewhere in time
-        doing_kalman_update = False
         if model_time in obs_data:
-            doing_kalman_update = True
             
             # krige data to observations
-            K, V = simple_kriging_data_to_model(obs_data[model_time], E, W, mresV ** 0.5, t)
+            K, V = simple_kriging_data_to_model(obs_data[model_time], mfm, wrf_data, mresV ** 0.5, t)
 
             # run the kalman update in each model
             # gather the standard deviations of the moisture fuel after the Kalman update

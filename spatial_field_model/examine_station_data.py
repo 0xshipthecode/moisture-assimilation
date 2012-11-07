@@ -1,144 +1,135 @@
 
-from spatial_model_utilities import load_station_data, render_spatial_field, \
-                                    equilibrium_moisture, load_stations_from_files, \
-                                    match_stations_to_gridpoints, \
-                                    great_circle_distance, match_time_series
+from time_series_utilities import match_time_series, build_observation_data
+from spatial_model_utilities import render_spatial_field, great_circle_distance
                                     
 from wrf_model_data import WRFModelData
+from observation_stations import Station, Observation
+from mean_field_model import MeanFieldModel
 
 from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.dates import DateFormatter
+import pytz
+import os
 
 
 station_list = [  "Julian_Moisture",
                   "Goose_Valley_Fuel_Moisture",
-#                  "Mt Laguna_Moisture",
                   "Oak_Grove_Moisture",
                   "Decanso_Moisture",
-#                  "Palomar_Fuel_Moisture",
                   "Alpine_Moisture",
-#                  "Valley_Center_Moisture",
                   "Ranchita_Moisture",
-                  "Camp_Elliot_Moisture",
-#                  "Pine Hills_Moisture" 
+                  "Camp_Elliot_Moisture"
                 ]
                   
 station_data_dir = "../real_data/witch_creek/"
 
 
-def plot_stations_vs_model_ts(stations, field_name, field, W):
+def plot_stations_vs_model_ts(stations, field_name, field, wrf_data):
     
-    ms_ts = match_time_series(stations, st_field_name, field, W)
-
     # extract station time series and corresponding grid point time series
     f = plt.figure()
     f.subplots_adjust(hspace = 1.2)
-    i = 1
-    for station_name in ms_ts.keys():
-        mr = ms_ts[station_name]
-        match_times, m_ts, st_ts = mr['t'], mr['model_ts'], mr['station_ts']
-        ax = plt.subplot(4, 2, i)
+    sp = 1
+    for s in stations:
+        i, j = s.get_nearest_grid_point()
+        model_tm = wrf_data.get_times()
+        mindx, obs_list = s.get_observations_for_times(field_name, model_tm)
+        obs_ts = [obs.get_value() for obs in obs_list]
+        common_tm = [model_tm[t] for t in mindx]
+        ax = plt.subplot(4, 2, sp)
         ax.xaxis.set_major_formatter(DateFormatter('%H:%m')) 
-        plt.plot(match_times, st_ts, 'ro-', match_times, m_ts, 'gx-', linewidth = 2)
-        plt.title('%s vs. model %s' % (station_name, st_field_name))
+        plt.plot(common_tm, obs_ts, 'ro-', common_tm, field[:, i, j], 'gx-', linewidth = 2)
+        plt.title('%s vs. model %s' % (s.get_name(), field_name))
         for l in ax.get_xticklabels():
             l.set_rotation(90)
-        i += 1
-    
+        sp += 1
+
 
 
 if __name__ == '__main__':
 
     # load the smallest domain
-    W = WRFModelData('../real_data/witch_creek/realfire03_d04_20071021.nc',
-                     [ 'T2', 'PSFC', 'Q2', 'RAINNC' ], 'US/Pacific')
+    wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04_20071021.nc', tz_name = 'US/Pacific')
 
     # read in vars
-    lat = W.get_lats()
-    lon = W.get_lons()
-    rain = W['RAINNC']
-    Q2 = W['Q2']
-    T2 = W['T2']
-    P = W['PSFC']
-    tm = W.get_times()
+    lon, lat = wrf_data.get_lons(), wrf_data.get_lats() 
+    P, Q, T, rain = wrf_data['PSFC'], wrf_data['Q2'], wrf_data['T2'], wrf_data['RAINNC']
+    tm = wrf_data.get_times()
+    Nt = len(tm)
         
     # load stations and match then to grid points
-    stations = load_stations_from_files(station_data_dir, station_list, 'US/Pacific')
-    match_stations_to_gridpoints(stations, lon, lat)
-
+    # load station data from files
+    tz = pytz.timezone('US/Pacific')
+    stations = [Station(os.path.join(station_data_dir, s), tz, wrf_data) for s in station_list]
+    
     # construct basemap for rendering
-    domain_rng = W.get_domain_extent()
+    domain_rng = wrf_data.get_domain_extent()
     m = Basemap(llcrnrlon=domain_rng[0],llcrnrlat=domain_rng[1],
                 urcrnrlon=domain_rng[2],urcrnrlat=domain_rng[3],
                 projection = 'mill')
 
     # compute the equilibrium moisture on grid points (for all times t)
-    Ed, Ew = equilibrium_moisture(P, Q2, T2)
+    Ed, Ew = wrf_data.get_moisture_equilibria()
+    E = 0.5 * (Ed + Ew)
+    
+    mfm = MeanFieldModel()
 
     # show the equilibrium field and render position of stations on top
-    render_spatial_field(m, lon, lat, 0.5 * (Ed[0,:,:] + Ew[0,:,:]), 'Equilibrium moisture')
-    for s in stations.keys():
-        st = stations[s]
-        slon, slat = st['lon'], st['lat']
+    render_spatial_field(m, lon, lat, E[0,:,:], 'Equilibrium moisture')
+    for s in stations:
+        slon, slat = s.get_position()
         x, y = m(slon, slat)
         plt.plot(x, y, 'o', markersize = 8, markerfacecolor = 'magenta')
-        plt.text(x, y, s)
+        plt.text(x, y, s.get_name())
 
     x, y = m(lon.ravel(), lat.ravel())
     plt.plot(x, y, 'k+', markersize = 4)
+        
+    # part C - fit the mean field model
+    obs_data = build_observation_data(stations, 'fuel_moisture', wrf_data)
+    gammas = []
+    residuals = {}
+    ot = []
+    for t in range(Nt):
+        if tm[t] in obs_data:
+            ot.append(t)
+            obs_at_t = obs_data[tm[t]] 
+            mfm.fit_to_data(E[t, :, :], obs_at_t)
+            gammas.append(mfm.gamma)
+            mu = mfm.predict_field()
+            
+            for obs in obs_at_t:
+                i, j = obs.get_nearest_grid_point()
+                sn = obs.get_station().get_name()
+                rs = residuals[sn] if sn in residuals else []
+                rs.append(obs.get_value() - E[t, i, j])
+                residuals[sn] = rs
+    
+    gammas = np.array(gammas)
+    ot = np.array(ot)
 
     # part B, compare values at the same times
-    for st_field_name, field in [ ('T', T2 - 273.15), ('fuel_moisture', 0.5 * (Ed + Ew))]:
-        plot_stations_vs_model_ts(stations, st_field_name, field, W)
-        
-    # examine fuel moisture residuals
-    fm_ts  = match_time_series(stations, 'fuel_moisture', field, W)
-    
-    # recode all of this into a matrix to fit the model
-    model_data = []
-    stat_data = []
-    weights = []
-    for s in fm_ts.keys():
-        mts, stts = fm_ts[s]['model_ts'], fm_ts[s]['station_ts']
-        stinfo = stations[s]
-        ngp = stinfo['nearest_grid_point']
-        model_data.extend(mts)
-        stat_data.extend(stts)
-        d = great_circle_distance(stinfo['lon'], stinfo['lat'], lon[ngp], lat[ngp])
-        weights.extend([1.0 / d for i in range(len(mts))])
-#        weights.extend([1.0 for i in range(len(mts))])
-        
-    mdata = np.array(model_data)
-    sdata = np.array(stat_data)
-    weights = np.array(weights)
-    
-    # compute the best fit of the data
-    beta = np.sum(weights * mdata * sdata) / np.sum(weights * mdata ** 2)
-    print("Weighted lin. regression parameter is %g." % beta)
-    
-    # plot fitted model
-    plot_stations_vs_model_ts(stations, 'fuel_moisture', beta * 0.5 * (Ed + Ew), W)
-    
-    # now get all the residuals of the fit in each station
-    sres = {}
-    for s in fm_ts:
-        st = stations[s]
-        mts, stts = fm_ts[s]['model_ts'], fm_ts[s]['station_ts']
-        sres[s] = (np.array(stts) - beta * np.array(mts), st['lon'], st['lat'])
+    for st_field_name, field in [ ('air_temp', T[ot,:,:] - 273.15), ('fuel_moisture', E[ot,:,:])]:
+        plot_stations_vs_model_ts(stations, st_field_name, field, wrf_data)
 
+    # plot fitted model
+    plot_stations_vs_model_ts(stations, 'fuel_moisture', gammas[:, np.newaxis, np.newaxis] * E[ot,:,:], wrf_data)
+    
     # **********************************************************************************
     # compute COVARIANCE between station residuals and plot this vs. distance
-    Ns = len(fm_ts.keys())
+    Ns = len(stations)
+    ss = [s.get_name() for s in stations]
     C = np.zeros((Ns,Ns))
     D = np.zeros((Ns,Ns))
-    for s1, i in zip(fm_ts.keys(), range(Ns)):
-        r1, lon1, lat1 = sres[s1]
-        for s2, j in zip(fm_ts.keys(), range(Ns)):
-            r2, lon2, lat2 = sres[s2]
+    for i in range(Ns):
+        r1, (lon1, lat1) = residuals[ss[i]], stations[i].get_position()
+        for j in range(Ns):
+            s2name = stations[j].get_name()
+            r2, (lon2, lat2) = residuals[ss[j]], stations[j].get_position()
             cc = np.cov(r1, r2)
-            C[i,j] = cc[0,1]
+            C[i,j] = cc[0, 1]
             D[i,j] = great_circle_distance(lon1, lat2, lon2, lat2)
 
     f = plt.figure(figsize = (8,8))
@@ -147,13 +138,13 @@ if __name__ == '__main__':
     plt.imshow(C, interpolation = 'nearest')
     plt.title('Covariance [-]')
     plt.colorbar()
-    ax.set_xticklabels(fm_ts.keys(), rotation = 90)
-    ax.set_yticklabels(fm_ts.keys())
+    ax.set_xticklabels(ss, rotation = 90)
+    ax.set_yticklabels(ss)
     ax = plt.subplot(222)
     plt.imshow(D, interpolation = 'nearest')
     plt.title('Distance [km]')
-    ax.set_xticklabels(fm_ts.keys(), rotation = 90)
-    ax.set_yticklabels(fm_ts.keys())
+    ax.set_xticklabels(ss, rotation = 90)
+    ax.set_yticklabels(ss)
     plt.colorbar()
     plt.subplot(223)
     colors = 'rgbcmyk'
@@ -183,15 +174,15 @@ if __name__ == '__main__':
 
     # **********************************************************************************
     # compute CORRELATION COEFFICIENT between station residuals and plot this vs. distance
-    Ns = len(fm_ts.keys())
     C = np.zeros((Ns,Ns))
     D = np.zeros((Ns,Ns))
-    for s1, i in zip(fm_ts.keys(), range(Ns)):
-        r1, lon1, lat1 = sres[s1]
-        for s2, j in zip(fm_ts.keys(), range(Ns)):
-            r2, lon2, lat2 = sres[s2]
+    for i in range(Ns):
+        r1, (lon1, lat1) = residuals[ss[i]], stations[i].get_position()
+        for j in range(Ns):
+            s2name = stations[j].get_name()
+            r2, (lon2, lat2) = residuals[ss[j]], stations[j].get_position()
             cc = np.corrcoef(r1, r2)
-            C[i,j] = cc[0,1]
+            C[i,j] = cc[0, 1]
             D[i,j] = great_circle_distance(lon1, lat2, lon2, lat2)
 
     f = plt.figure(figsize = (8,8))
@@ -201,13 +192,13 @@ if __name__ == '__main__':
     plt.clim([0.0, 1.0])
     plt.title('Correlation coefficient [-]')
     plt.colorbar()
-    ax.set_xticklabels(fm_ts.keys(), rotation = 90)
-    ax.set_yticklabels(fm_ts.keys())
+    ax.set_xticklabels(ss, rotation = 90)
+    ax.set_yticklabels(ss)
     ax = plt.subplot(222)
     plt.imshow(D, interpolation = 'nearest')
     plt.title('Distance [km]')
-    ax.set_xticklabels(fm_ts.keys(), rotation = 90)
-    ax.set_yticklabels(fm_ts.keys())
+    ax.set_xticklabels(ss, rotation = 90)
+    ax.set_yticklabels(ss)
     plt.colorbar()
     plt.subplot(223)
     colors = 'rgbcmyk'
