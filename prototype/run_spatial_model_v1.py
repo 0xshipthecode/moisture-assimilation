@@ -78,7 +78,7 @@ class OnlineVarianceEstimator:
 
 def run_module():
         
-    wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04_20071022.nc')
+    wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04_20071021.nc')
     
     # read in vars
     lat, lon = wrf_data.get_lats(), wrf_data.get_lons()

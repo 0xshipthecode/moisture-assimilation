@@ -24,8 +24,6 @@ def construct_spatial_correlation_matrix(gridndx, mlons, mlats):
 
 
 
-
-
 def simple_kriging_data_to_model(obs_data, obs_stds, E, mfm, wrf_data, mod_stds, t):
     """
     Simple kriging of data points to model points.  The kriging results in
@@ -42,22 +40,19 @@ def simple_kriging_data_to_model(obs_data, obs_stds, E, mfm, wrf_data, mod_stds,
     obs_vals = np.zeros((Nobs,))
     station_lonlat = []
     gridndx = []
+    mu_obs = np.zeros((Nobs,))
         
+    # compute nominal state for grid points
+    mu_mod = mfm.predict_field(E)
+
     # accumulate the indices of the nearest grid points
     ndx = 0
     for obs in obs_data:
         gridndx.append(obs.get_nearest_grid_point())
         obs_vals[ndx] = obs.get_value()
         station_lonlat.append(obs.get_position())
+        mu_obs[ndx] = mu_mod[obs.get_nearest_grid_point()]
         ndx += 1
-        
-    # compute nominal state for grid points
-    mu_mod = mfm.predict_field(E)
-
-    # compute nominal state for station data
-    mu_obs = np.zeros((Nobs,))
-    for g, i in zip(gridndx, range(Nobs)):
-        mu_obs[i] = mu_mod[g]
 
     # compute observation residuals (using model fit from examine_station_data)
     res_obs = obs_vals - mu_obs

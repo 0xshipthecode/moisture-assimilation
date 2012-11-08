@@ -53,7 +53,7 @@ def plot_stations_vs_model_ts(stations, field_name, field, wrf_data):
 if __name__ == '__main__':
 
     # load the smallest domain
-    wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04_20071021.nc', tz_name = 'US/Pacific')
+    wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04_20071022.nc', tz_name = 'US/Pacific')
 
     # read in vars
     lon, lat = wrf_data.get_lons(), wrf_data.get_lats() 
