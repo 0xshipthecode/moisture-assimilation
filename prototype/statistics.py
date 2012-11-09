@@ -14,5 +14,4 @@ def compute_ols_estimator(X, y):
     Xm = np.asmatrix(X)
     Ym = np.asmatrix(y)
     beta = np.linalg.inv(Xm.T * Xm) * Xm.T * Ym
-    print np.mean(Ym - Xm*beta)
     return np.asarray(beta)[:,0]

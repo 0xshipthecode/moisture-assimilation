@@ -6,6 +6,7 @@ from kriging_methods import simple_kriging_data_to_model
 from time_series_utilities import build_observation_data
 from wrf_model_data import WRFModelData
 from mean_field_model import MeanFieldModel
+from diagnostics import init_diagnostics, diagnostics
 
 import numpy as np
 from mpl_toolkits.basemap import Basemap
@@ -29,6 +30,11 @@ station_data_dir = "../real_data/witch_creek/"
 
     
 def run_module():
+
+    # configure diagnostics        
+    init_diagnostics("results/kriging_test_diagnostics.txt")
+    diagnostics().configure_tag("skdm_obs_res", True, True, True)
+    diagnostics().configure_tag("skdm_obs_res_mean", True, True, True)
         
     wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04_20071022.nc')
     
@@ -76,20 +82,20 @@ def run_module():
             print("Time: %s, step: %d" % (str(model_time), t))
             
             mfm.fit_to_data(E, obs_data[model_time])
+            Efit = mfm.predict_field(E)
 
             # krige data to observations
-            K, V = simple_kriging_data_to_model(obs_data[model_time], obs_res_std, E,
-                                                mfm, wrf_data, mod_res_std, t)
+            K, V = simple_kriging_data_to_model(obs_data[model_time], obs_res_std, Efit, wrf_data, mod_res_std, t)
                 
             plt.clf()
             plt.subplot(2,2,1)
-            render_spatial_field(m, lon, lat, E, 'Equilibrium')
-            plt.clim([0.0, np.max(E)])
+            render_spatial_field(m, lon, lat, Efit, 'Equilibrium')
+            plt.clim([0.0, 0.2])
             plt.colorbar()
 
             plt.subplot(2,2,2)
             render_spatial_field(m, lon, lat, K, 'Kriging field')
-#            plt.clim([0.0, np.max(K)])
+            plt.clim([0.0, 0.2])
             plt.colorbar()
 
             plt.subplot(2,2,3)
@@ -98,7 +104,7 @@ def run_module():
             plt.colorbar()
             
             plt.subplot(2,2,4)
-            render_spatial_field(m, lon, lat, K - mfm.predict_field(E), 'Kriging vs. equi. res')
+            render_spatial_field(m, lon, lat, K - Efit, 'Kriging vs. mean field residuals')
 #            plt.clim([0.0, np.max()])
             plt.colorbar()
             

@@ -1,5 +1,6 @@
 
 import numpy as np
+from diagnostics import diagnostics
 
 
 class MeanFieldModel:
@@ -11,13 +12,14 @@ class MeanFieldModel:
     
     def __init__(self):
         self.gamma = 1.0
+        diagnostics().configure_tag("mfm_res_avg", True, True, True)
+        diagnostics().configure_tag("mfm_gamma", True, True, True)
     
     
     def fit_to_data(self, E, obs_list):
         """
         Fit the model to the observations.  Computes a weighted least squares
-        estimate of the observed data.  The weight is given by the inverse
-        distance from the nearest grid point to the observation station.
+        estimate of the observed data.
         """
         # gather observation data and corresponding model data        
         grid_pts = [obs.get_nearest_grid_point() for obs in obs_list]
@@ -28,8 +30,9 @@ class MeanFieldModel:
         
         # compute the weighted regression
         self.gamma = np.sum(weights * modv * obsv) / np.sum(weights * modv ** 2)
+        diagnostics().push("mfm_gamma", self.gamma)
         
-        print("Mean field residual average: %g" % np.mean(obsv - self.gamma * modv))
+        diagnostics().push("mfm_res_avg", np.mean(obsv - self.gamma * modv))
 
 
     def predict_field(self, E):

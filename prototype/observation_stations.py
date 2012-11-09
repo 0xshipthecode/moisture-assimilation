@@ -15,13 +15,16 @@ class Observation:
     An observation of a field value at a certain time.
     """
     
-    def __init__(self, s, tm, fm_obs):
+    def __init__(self, s, tm, fm_obs, fm_var, field_name):
         """
         Constructs an observation packet from the info dictionary.
         """
         self.s = s
         self.tm = tm
         self.obs_val = fm_obs
+        self.field_name = field_name
+        self.obs_var = fm_var
+
         
     def get_time(self):
         """
@@ -35,6 +38,13 @@ class Observation:
         Return the observation value.
         """
         return self.obs_val
+    
+
+    def get_measurement_variance(self):
+        """
+        Return the variance of the measurement of the given field.
+        """
+        return self.obs_var
         
 
     def get_position(self):
@@ -85,6 +95,8 @@ class Station:
         self.grid_pt = find_closest_grid_point(self.lon, self.lat, mlon, mlat)
         self.dist_grid_pt =  great_circle_distance(self.lon, self.lat, mlon[self.grid_pt], mlat[self.grid_pt])
         
+        self.measurement_variance = {}
+        
 
     def get_name(self):
         """
@@ -133,7 +145,21 @@ class Station:
         Return the elevation in meters above sea level.
         """
         return self.elevation
-
+    
+    
+    def get_measurement_variance(self, field_name):
+        """
+        Return the variance of the measurement from this station.
+        """
+        return self.measurement_variance[field_name]
+    
+    
+    def set_measurement_variance(self, field_name, v):
+        """
+        Set the variance of the measurements from this station.
+        """
+        self.measurement_variance[field_name] = v
+        
         
     def load_station_data(self, station_file, tz):
         """
@@ -211,4 +237,5 @@ class Station:
         """
         _, indx_me, indx_other = match_sample_times(self.tm, tm)
         ts = vars(self)[obs_type]
-        return indx_other, [Observation(self, self.tm[i], ts[i]) for i in indx_me]
+        mv = self.get_measurement_variance(obs_type)
+        return indx_other, [Observation(self, self.tm[i], ts[i], mv, obs_type) for i in indx_me]

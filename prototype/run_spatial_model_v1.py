@@ -13,6 +13,7 @@ from wrf_model_data import WRFModelData
 from cell_model import CellMoistureModel
 from mean_field_model import MeanFieldModel
 from observation_stations import Station
+from diagnostics import init_diagnostics, diagnostics
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.basemap import Basemap
@@ -78,6 +79,11 @@ class OnlineVarianceEstimator:
 
 def run_module():
         
+    # configure diagnostics        
+    init_diagnostics("results/moisture_model_v1_diagnostics.txt")
+    diagnostics().configure_tag("skdm_obs_res", True, True, True)
+    diagnostics().configure_tag("skdm_obs_res_mean", True, True, True)
+
     wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04_20071021.nc')
     
     # read in vars
@@ -93,6 +99,8 @@ def run_module():
     # load station data from files
     tz = pytz.timezone('US/Pacific')
     stations = [Station(os.path.join(station_data_dir, s), tz, wrf_data) for s in station_list]
+    for s in stations:
+        s.set_measurement_variance('fuel_moisture', 0.1)
     
     # build the observation data structure indexed by time
     obs_data = build_observation_data(stations, 'fuel_moisture', wrf_data)
@@ -101,17 +109,15 @@ def run_module():
     E = 0.5 * (Ed[1,:,:] + Ew[1,:,:])
     
     # set up parameters
-    Qij = np.eye(9) * 0.005
+    Qij = np.eye(9) * 0.0001
     dt = 10.0 * 60
     K = np.zeros_like(E)
     V = np.zeros_like(E)
     mV = np.zeros_like(E)
     Kg = np.zeros_like(E)
     
-    # moisture state - residual variance
+    # moisture state and observation residual variance estimators
     mod_re = OnlineVarianceEstimator(np.zeros_like(E), np.ones_like(E) * 0.03, 1)
-    
-    # observations - residual variance 
     obs_re = OnlineVarianceEstimator(np.zeros((len(stations),)), np.ones(len(stations),) * 0.1, 1)
     
     # initialize the mean field model (default fit is 1.0 of equilibrium before new information comes in)
@@ -130,7 +136,7 @@ def run_module():
                 urcrnrlon=lon_rng[1],urcrnrlat=lat_rng[1],
                 projection = 'mill')
 
-    plt.figure(figsize = (10, 6))
+    plt.figure(figsize = (12, 8))
     
     # run model
     for t in range(1, Nt):
@@ -158,16 +164,18 @@ def run_module():
             ngp_vals = np.array([E[o.get_nearest_grid_point()] for o in obs_data[model_time]])
             obs_re.update_with(obs_vals - ngp_vals)
             
+        Efit = mfm.predict_field(E)
+            
         # update the model residual estimator and get current best estimate of variance
-        mod_re.update_with(f[:,:,1] - mfm.predict_field(E))
+        mod_re.update_with(f[:,:,1] - Efit)
         mresV = mod_re.get_variance()
 
         # if we have an observation somewhere in time
         if model_time in obs_data:
             
             # krige data to observations
-            K, V = simple_kriging_data_to_model(obs_data[model_time], obs_re.get_variance() ** 0.5, E,
-                                                mfm, wrf_data, mresV ** 0.5, t)
+            K, V = simple_kriging_data_to_model(obs_data[model_time], obs_re.get_variance() ** 0.5,
+                                                Efit, wrf_data, mresV ** 0.5, t)
 
             # run the kalman update in each model
             # gather the standard deviations of the moisture fuel after the Kalman update
@@ -193,11 +201,10 @@ def run_module():
         plt.clim([0.0, 0.2])        
         plt.colorbar()
         plt.subplot(3,3,4)
-        render_spatial_field(m, lon, lat, E, 'Equilibrium')
+        render_spatial_field(m, lon, lat, Efit, 'Equilibrium Fit')
         plt.clim([0.0, 0.2])        
         plt.colorbar()
         plt.subplot(3,3,5)
-#        render_spatial_field(m, lon, lat, rain[t,:,:], 'Rain')
         render_spatial_field(m, lon, lat, Kg, 'Kalman gain')       
         plt.clim([0.0, 1.0])        
         plt.colorbar()
