@@ -10,7 +10,8 @@ from time_series_utilities import build_observation_data
                                     
 from kriging_methods import simple_kriging_data_to_model
 from wrf_model_data import WRFModelData
-from cell_model import CellMoistureModel
+#from cell_model import CellMoistureModel
+from cell_model_opt import CellMoistureModel
 from mean_field_model import MeanFieldModel
 from observation_stations import Station
 from diagnostics import init_diagnostics, diagnostics
@@ -20,6 +21,7 @@ from mpl_toolkits.basemap import Basemap
 import numpy as np
 import os
 import pytz
+import cPickle
 
 
 station_list = [  "Julian_Moisture",
@@ -92,6 +94,10 @@ def run_module():
     rain = wrf_data['RAINNC']
     Ed, Ew = wrf_data.get_moisture_equilibria()
     
+    # find maximum moisture overall to set up visualization
+#    maxE = max(np.max(Ed), np.max(Ew)) * 1.2
+    maxE = 0.3
+    
     # obtain sizes
     Nt = rain.shape[0]
     dom_shape = lat.shape
@@ -155,17 +161,21 @@ def run_module():
         f = np.zeros((dom_shape[0], dom_shape[1], 3))
         for p in np.ndindex(dom_shape):
             f[p[0], p[1], :] = models[p].get_state()[:3]
-            mV[pos] = models[p].P[1,1]
+            mV[pos] = models[p].get_state_covar()[1,1]
+            
+        # base field used to predict the mean field in the model 
+        base_field = f[:,:,1]
 
         # check if we are to update the mean field model first
         if model_time in obs_data:
-            mfm.fit_to_data(E, obs_data[model_time])
+            mfm.fit_to_data(base_field, obs_data[model_time])
             obs_vals = np.array([o.get_value() for o in obs_data[model_time]])
-            ngp_vals = np.array([E[o.get_nearest_grid_point()] for o in obs_data[model_time]])
+            ngp_vals = np.array([base_field[o.get_nearest_grid_point()] for o in obs_data[model_time]])
             obs_re.update_with(obs_vals - ngp_vals)
             
-        Efit = mfm.predict_field(E)
-            
+        # predict using observed fuel type
+        Efit = mfm.predict_field(base_field)
+
         # update the model residual estimator and get current best estimate of variance
         mod_re.update_with(f[:,:,1] - Efit)
         mresV = mod_re.get_variance()
@@ -190,19 +200,19 @@ def run_module():
         plt.clf()
         plt.subplot(3,3,1)
         render_spatial_field(m, lon, lat, f[:,:,0], 'Fast fuel')
-        plt.clim([0.0, 0.2])
+        plt.clim([0.0, maxE])
         plt.colorbar()
         plt.subplot(3,3,2)
         render_spatial_field(m, lon, lat, f[:,:,1], 'Mid fuel')
-        plt.clim([0.0, 0.2])        
+        plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,3)
         render_spatial_field(m, lon, lat, f[:,:,2], 'Slow fuel')
-        plt.clim([0.0, 0.2])        
+        plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,4)
         render_spatial_field(m, lon, lat, Efit, 'Equilibrium Fit')
-        plt.clim([0.0, 0.2])        
+        plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,5)
         render_spatial_field(m, lon, lat, Kg, 'Kalman gain')       
@@ -214,6 +224,7 @@ def run_module():
         plt.colorbar()
         plt.subplot(3,3,7)
         render_spatial_field(m, lon, lat, K, 'Kriged observations')
+        plt.clim([0.0, maxE])
         plt.colorbar()
         plt.subplot(3,3,8)
         render_spatial_field(m, lon, lat, V, 'Kriging variance')
@@ -224,10 +235,24 @@ def run_module():
         plt.clim([0.0, np.max(mresV)])
         plt.colorbar()
         
-        plt.savefig('model_outputs/moisture_model_t%03d.png' % t) 
+        plt.savefig('model_outputs/moisture_model_t%03d.png' % t)
         
-                
+    # store the gamma coefficients
+    with open('model_outputs/gamma.txt', 'w') as f:
+        f.write(str(diagnostics().pull('mfm_gamma')))
+        
+    # make a plot of gammas
+    plt.figure()
+    plt.subplot(211)
+    plt.plot(diagnostics().pull('mfm_gamma'))
+    plt.title('Mean field model - gamma')
+    plt.subplot(212)
+    plt.plot(diagnostics().pull('skdm_cov_cond'))
+    plt.title('Condition number of covariance matrix')
+    plt.savefig('model_outputs/plot_gamma.png')
     
+    diagnostics().dump_store('model_outputs/diagnostics.bin')
+            
 if __name__ == '__main__':
 #    profile.run('run_module(); print', 'spatial_model.stats')
 #    

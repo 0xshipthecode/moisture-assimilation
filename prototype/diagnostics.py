@@ -1,7 +1,7 @@
 
 
 from datetime import datetime
-
+import cPickle
 
 
 class Diagnostics:
@@ -64,7 +64,16 @@ class Diagnostics:
         Pull the list of stored values for tag (if any).
         If nothing is stored for the tag, method returns None.
         """
-        return self.store[tag] if tag in self.store else None 
+        return self.store[tag] if tag in self.store else None
+    
+    
+    def dump_store(self, fname):
+        """
+        Dump the store of this diagnostics object to file given as filename.
+        """
+        with open(fname, 'w') as f:
+            cPickle.dump(self.store, f)  
+
 
 
 _diagnostic_singleton = None
