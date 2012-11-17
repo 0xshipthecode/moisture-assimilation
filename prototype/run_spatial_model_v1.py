@@ -127,7 +127,8 @@ def run_module():
     E = 0.5 * (Ed[1,:,:] + Ew[1,:,:])
     
     # set up parameters
-    Qij = np.eye(9) * 0.0001
+    Q = np.eye(9) * 0.0001
+    P0 = np.eye(9) * 0.001
     dt = 10.0 * 60
     K = np.zeros_like(E)
     V = np.zeros_like(E)
@@ -150,7 +151,7 @@ def run_module():
     Tk = np.array([1.0, 10.0, 100.0]) * 3600
     models = np.zeros(dom_shape, dtype = np.object)
     for pos in np.ndindex(dom_shape): 
-        models[pos] = CellMoistureModel((lat[pos], lon[pos]), 3, E[pos], Tk, P0 = Qij)
+        models[pos] = CellMoistureModel((lat[pos], lon[pos]), 3, E[pos], Tk, P0 = P0)
     
     # construct a basemap representation of the area
     lat_rng = (np.min(lat), np.max(lat))
@@ -172,7 +173,7 @@ def run_module():
         # run the model update
         for pos in np.ndindex(dom_shape):
             i, j = pos
-            models[pos].advance_model(Ed[t, i, j], Ew[t, i, j], rain[t, i, j], dt, Qij)
+            models[pos].advance_model(Ed[t, i, j], Ew[t, i, j], rain[t, i, j], dt, Q)
             
         # prepare visualization data        
         f = np.zeros((dom_shape[0], dom_shape[1], 3))
