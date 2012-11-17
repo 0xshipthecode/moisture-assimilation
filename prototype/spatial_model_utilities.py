@@ -61,20 +61,29 @@ def render_spatial_field(m, lon, lat, field, title):
     does not seem to have sufficient resolution.
     TODO: can I obtain more detailed topography?
     """
-#    dx = (np.max(lon) - np.min(lon)) / 5
-#    dy = (np.max(lat) - np.min(lat)) / 5
-#    lat_rng = (np.min(lat), np.max(lat))
-#    lon_rng = (np.min(lon), np.max(lon))
-#    m.drawparallels(np.arange(lat_rng[0],lat_rng[1], dy))
-#    m.drawmeridians(np.arange(lon_rng[0],lon_rng[1], dx))
-#    m.drawcoastlines()
-##    imf = m.transform_scalar(field.ravel(), lon.ravel(), lat.ravel(), lon.shape[0], lat.shape[1])
-#    x, y = m(lon, lat)
-#    m.pcolormesh(x, y, field, alpha = 0.6, edgecolor = 'none')
+    dx = (np.max(lon) - np.min(lon)) / 5
+    dy = (np.max(lat) - np.min(lat)) / 5
+    lat_rng = (np.min(lat), np.max(lat))
+    lon_rng = (np.min(lon), np.max(lon))
+    m.drawparallels(np.arange(lat_rng[0],lat_rng[1], dy))
+    m.drawmeridians(np.arange(lon_rng[0],lon_rng[1], dx))
+    m.drawcoastlines()
+    imf = m.transform_scalar(field.ravel(), lon.ravel(), lat.ravel(), lon.shape[0], lat.shape[1])
+    x, y = m(lon, lat)
+    m.pcolormesh(x, y, field, alpha = 0.6, edgecolor = 'none')
+    plt.title(title)
+    
+
+
+def render_spatial_field_fast(m, lon, lat, field, title):
+    """
+    Execute a simple imshow for accelerated rendering of the data.
+    Drop_in replacement for render_spatial_field.  Does not use m, lon, lat
+    parameters at all. 
+    """
     plt.imshow(field[::-1,:])
     plt.axis('tight')
     plt.title(title)
-    
 
 
 def find_closest_grid_point(slon, slat, glon, glat):

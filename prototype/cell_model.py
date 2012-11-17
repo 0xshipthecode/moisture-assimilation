@@ -31,8 +31,8 @@ class CellMoistureModel:
         # state covariance matrix
         self.P = np.eye(2*k+3) * 0.02 if P0 is None else P0.copy()
         self.P2 = np.zeros_like(self.P)
-        self.H = np.zeros((2*k+3,))
-        self.J = np.zeros((2*k+3,2*k+3))
+        self.H = np.zeros((k, 2*k+3))
+        self.J = np.zeros((2*k+3, 2*k+3))
         
 
     def advance_model(self, Ed, Ew, r, dt, mQ = None):
@@ -182,25 +182,29 @@ class CellMoistureModel:
         return self.P
     
     
-    def kalman_update(self, obs_val, obs_var, fuel_type):
+    def kalman_update(self, O, V, fuel_types):
         """
         Updates the state using the observation at the grid point.
         
-          obs_val - the value of the observed fuel moisture
-          obs_var - the variance of the observed fuel moisture
-          fuel_type - the fuel type [0..k-1], where k is the number of fuels run in the model
+          O - the 1D vector of observations 
+          V - the (diagonal) variance matrix of the measurements
+          fuel_types - the fuel types for which the observations exist (used to construct observation vector)
+          
         """
-        
         P, H = self.P, self.H
         H[:] = 0.0
-        H[fuel_type] = 1.0
         
-        # we assume we only observe one fuel at a time (simplifes inversion)
-        I = np.dot(np.dot(H, P), H.T) + obs_var
-        K = np.dot(P, H.T) / I
+        # construct an observation operator tailored to observed fuel types 
+        for i in fuel_types:
+            H[i,i] = 1.0
+        Ho = H[fuel_types,:]
+        
+        # use general observation model
+        I = np.dot(np.dot(Ho, P), Ho.T) + V
+        K = np.dot(np.dot(P, Ho.T), np.linalg.inv(I))
         
         # update state and state covariance
-        self.m_ext += K * (obs_val - self.m_ext[fuel_type])
-        P -= np.dot(np.dot(K, H), P) 
+        self.m_ext += np.dot(K, O - self.m_ext[fuel_types])
+        P -= np.dot(np.dot(K, Ho), P) 
 
-        return K[fuel_type]
+        return [ K[fuel_types[i], i] for i in range(len(fuel_types)) ]

@@ -83,7 +83,7 @@ class Station:
 
         # array of values
         self.tm = []
-        self.fuel_moisture = []
+        self.fm10 = []
         self.rh = []
         self.rain = []
         self.air_temp = []
@@ -217,7 +217,7 @@ class Station:
                 self.tm.append(mtime)
                 self.air_temp.append(float(fields[5]))
                 self.fuel_temp.append(float(fields[6]))
-                self.fuel_moisture.append(float(fields[7]) / 100.0)
+                self.fm10.append(float(fields[7]) / 100.0)
                 self.rh.append(float(fields[8]))
                 self.rain.append(float(fields[11]))
                 l = f.readline()

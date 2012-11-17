@@ -28,8 +28,7 @@ class WRFModelData:
             self.change_time_zone(tz_name)
     
 
-    def load_data(self, data_file,
-                  var_names):
+    def load_data(self, data_file, var_names):
         """
         Load required variables from the file data_file.  A list of variables
         is either supplied or the default list is used which contains the following
@@ -47,7 +46,6 @@ class WRFModelData:
         for vname in var_names:
             self.fields[vname] = d.variables[vname][:,...]
             
-        # we assume the domain does not move in time
         self.fields['lat'] = d.variables['XLAT'][0,:,:]
         self.fields['lon'] = d.variables['XLONG'][0,:,:]
             
