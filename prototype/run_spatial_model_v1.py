@@ -18,7 +18,6 @@ from observation_stations import Station
 from diagnostics import init_diagnostics, diagnostics
 
 import matplotlib.pyplot as plt
-#from mpl_toolkits.basemap import Basemap
 import numpy as np
 import os
 import sys
@@ -155,19 +154,13 @@ def run_module():
     models = np.zeros(dom_shape, dtype = np.object)
     for pos in np.ndindex(dom_shape): 
         models[pos] = CellMoistureModel((lat[pos], lon[pos]), 3, E[pos], Tk, P0 = P0)
-    
-    # construct a basemap representation of the area
-#    lat_rng = (np.min(lat), np.max(lat))
-#    lon_rng = (np.min(lon), np.max(lon))
-#    m = Basemap(llcrnrlon=lon_rng[0],llcrnrlat=lat_rng[0],
-#                urcrnrlon=lon_rng[1],urcrnrlat=lat_rng[1],
-#                projection = 'mill')
+
     m = None
 
     plt.figure(figsize = (12, 8))
     
     # run model
-    for t in range(1, Nt):
+    for t in range(1, 18):
         model_time = wrf_data.get_times()[t]
         print("Time: %s, step: %d" % (str(model_time), t))
 
@@ -265,7 +258,7 @@ def run_module():
         plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,4)
-        render_spatial_field_fast(m, lon, lat, predicted_field, 'Equilibrium Fit')
+        render_spatial_field_fast(m, lon, lat, predicted_field, 'Mean field Fit')
         plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,5)
@@ -308,15 +301,17 @@ def run_module():
     # make a plot for each substation
     plt.figure()
     for i in range(len(stations)):
+        plt.clf()
         # get data for the i-th station
         t_i = [ o[0] for o in diagnostics().pull("assim_obs_mod") ]
         obs_i = [ o[2][i] for o in diagnostics().pull("assim_obs_mod") ]
         mod_i = [ o[3][i] for o in diagnostics().pull("assim_obs_mod") ]
         krig_i = [ o[4][i] for o in diagnostics().pull("assim_obs_mod") ]
+        mx = max(max(obs_i), max(mod_i), max(krig_i))
         plt.plot(t_i, obs_i, 'ro')
         plt.plot(t_i, mod_i, 'gx-')
         plt.plot(t_i, krig_i, 'bo-')
-        plt.ylim([0.0, 0.3])
+        plt.ylim([0.0, 1.1 * mx])
         plt.legend(['Obs.', 'Model', 'Kriged'])
         plt.title('Station observations fit to model and kriging field')
         plt.savefig(os.path.join(cfg['output_dir'], 'station%02d.png' % (i+1)))
@@ -324,7 +319,7 @@ def run_module():
     plt.figure()
     plt.plot([d[0] for d in diagnostics().pull("assim_K")], [d[1] for d in diagnostics().pull("assim_K")], 'ro-')
     plt.title('Average Kalman gain')
-    plt.savefig(os.path.join(cfg['output_dir'], 'kalman_gain.png'))
+    plt.savefig(os.path.join(cfg['output_dir'], 'plot_kalman_gain.png'))
     
     diagnostics().dump_store(os.path.join(cfg['output_dir'], 'diagnostics.bin'))
     
