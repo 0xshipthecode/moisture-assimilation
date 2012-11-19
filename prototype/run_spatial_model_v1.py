@@ -296,7 +296,7 @@ def run_module():
     diagnostics().dump_store(os.path.join(cfg['output_dir'], 'diagnostics.bin'))
     
     # as a last step encode all the frames as video
-    os.system("cd %s; avconv -qscale 1 -r 5 -b 9600 -i moisture_model_t%%03d.png video.mp4" % cfg['output_dir'])
+    os.system("cd %s; avconv -qscale 1 -r 20 -b 9600 -i moisture_model_t%%03d.png video.mp4" % cfg['output_dir'])
 
 
 if __name__ == '__main__':
