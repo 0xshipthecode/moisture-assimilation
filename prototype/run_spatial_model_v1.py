@@ -95,8 +95,11 @@ def run_module():
         
     # configure diagnostics        
     init_diagnostics(os.path.join(cfg['output_dir'], 'moisture_model_v1_diagnostics.txt'))
-    diagnostics().configure_tag("skdm_obs_res", True, True, True)
-    diagnostics().configure_tag("skdm_cov_cond", True, True, True)
+    diagnostics().configure_tag("skdm_obs_res", False, True, True)
+    diagnostics().configure_tag("skdm_cov_cond", False, True, True)
+
+    diagnostics().configure_tag("assim_K", False, False, True)
+    diagnostics().configure_tag("assim_obs_mod", False, False, True)
 
     wrf_data = WRFModelData(cfg['input_file'])
     
@@ -211,6 +214,10 @@ def run_module():
                 # krige data to observations
                 Kf_fn, Vf_fn = simple_kriging_data_to_model(obs_data[model_time], obs_re.get_variance() ** 0.5,
                                                             predicted_field, wrf_data, mresV ** 0.5, t)
+
+                krig_vals = np.array([Kf_fn[o.get_nearest_grid_point()] for o in obs_data[model_time]])                
+                diagnostics().push("assim_obs_mod", (t, fuel_ndx, obs_vals, ngp_vals, krig_vals))
+
                 
                 # append to storage for kriged fields in this time instant
                 Kf.append(Kf_fn)
@@ -234,6 +241,10 @@ def run_module():
                 
                 # execute the Kalman update 
                 Kg[pos[0], pos[1], :] = models[pos].kalman_update(O, V, fn)
+                
+            # push the mean Kalman gain
+            diagnostics().push("assim_K", (t, np.mean(Kg[:,:,0])))
+            
 
         # prepare visualization data        
         f = np.zeros((dom_shape[0], dom_shape[1], 3))
@@ -242,15 +253,15 @@ def run_module():
             
         plt.clf()
         plt.subplot(3,3,1)
-        render_spatial_field_fast(m, lon, lat, f[:,:,0], 'Fast fuel')
+        render_spatial_field_fast(m, lon, lat, f[:,:,0], '1-hr fuel')
         plt.clim([0.0, maxE])
         plt.colorbar()
         plt.subplot(3,3,2)
-        render_spatial_field_fast(m, lon, lat, f[:,:,1], 'Mid fuel')
+        render_spatial_field_fast(m, lon, lat, f[:,:,1], '10-hr fuel')
         plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,3)
-        render_spatial_field_fast(m, lon, lat, f[:,:,2], 'Slow fuel')
+        render_spatial_field_fast(m, lon, lat, f[:,:,2], '100-hr fuel')
         plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,4)
@@ -258,11 +269,11 @@ def run_module():
         plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,5)
-        render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain')       
+        render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain for 10-hr fuel')       
         plt.clim([0.0, 1.0])        
         plt.colorbar()
         plt.subplot(3,3,6)
-        render_spatial_field_fast(m, lon, lat, mV, 'Mid fuel variance')
+        render_spatial_field_fast(m, lon, lat, mV, '10-hr fuel variance')
         plt.clim([0.0, np.max(mV)]) 
         plt.colorbar()
         plt.subplot(3,3,7)
@@ -293,6 +304,27 @@ def run_module():
     plt.plot(diagnostics().pull('skdm_cov_cond'))
     plt.title('Condition number of covariance matrix')
     plt.savefig(os.path.join(cfg['output_dir'], 'plot_gamma.png'))
+    
+    # make a plot for each substation
+    plt.figure()
+    for i in range(len(stations)):
+        # get data for the i-th station
+        t_i = [ o[0] for o in diagnostics().pull("assim_obs_mod") ]
+        obs_i = [ o[2][i] for o in diagnostics().pull("assim_obs_mod") ]
+        mod_i = [ o[3][i] for o in diagnostics().pull("assim_obs_mod") ]
+        krig_i = [ o[4][i] for o in diagnostics().pull("assim_obs_mod") ]
+        plt.plot(t_i, obs_i, 'ro')
+        plt.plot(t_i, mod_i, 'gx-')
+        plt.plot(t_i, krig_i, 'bo-')
+        plt.ylim([0.0, 0.3])
+        plt.legend(['Obs.', 'Model', 'Kriged'])
+        plt.title('Station observations fit to model and kriging field')
+        plt.savefig(os.path.join(cfg['output_dir'], 'station%02d.png' % (i+1)))
+        
+    plt.figure()
+    plt.plot([d[0] for d in diagnostics().pull("assim_K")], [d[1] for d in diagnostics().pull("assim_K")], 'ro-')
+    plt.title('Average Kalman gain')
+    plt.savefig(os.path.join(cfg['output_dir'], 'kalman_gain.png'))
     
     diagnostics().dump_store(os.path.join(cfg['output_dir'], 'diagnostics.bin'))
     

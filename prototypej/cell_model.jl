@@ -109,7 +109,7 @@ function advance_model(c::CellModel, Ed::Float64, Ew::Float64,
     J[2*k+3,2*k+3] = 1.0
 
     # update covariance (using computed Jacobian) and state
-    c.P = J*c.P*transpose(J) + Q
+    c.P = J*c.P*J' + Q
     c.m_ext[1:k] = m_new
 end
 
@@ -129,7 +129,7 @@ function kalman_update(c::CellModel, O::Vector{Float64},
     end
     
     # Kalman update matrices
-    K = P * transpose(H) * inv(H * P * transpose(H) + V)
+    K = P * H' * inv(H * P * H' + V)
 
     # update the state
     c.m_ext += K * (O - c.m_ext[fuel_types])
