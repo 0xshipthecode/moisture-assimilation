@@ -12,7 +12,7 @@ class MeanFieldModel:
     
     def __init__(self, lock_gamma = None):
         self.lock_gamma = lock_gamma != None
-        self.gamma = 1.0 if lock_gamma = None else lock_gamma
+        self.gamma = 1.0 if lock_gamma == None else lock_gamma
         diagnostics().push("mfm_lock_gamma", lock_gamma)
         diagnostics().configure_tag("mfm_res_avg", True, True, True)
         diagnostics().configure_tag("mfm_gamma", True, True, True)

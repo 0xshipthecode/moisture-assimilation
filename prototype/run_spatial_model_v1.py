@@ -18,7 +18,7 @@ from observation_stations import Station
 from diagnostics import init_diagnostics, diagnostics
 
 import matplotlib.pyplot as plt
-from mpl_toolkits.basemap import Basemap
+#from mpl_toolkits.basemap import Basemap
 import numpy as np
 import os
 import sys
@@ -154,11 +154,12 @@ def run_module():
         models[pos] = CellMoistureModel((lat[pos], lon[pos]), 3, E[pos], Tk, P0 = P0)
     
     # construct a basemap representation of the area
-    lat_rng = (np.min(lat), np.max(lat))
-    lon_rng = (np.min(lon), np.max(lon))
-    m = Basemap(llcrnrlon=lon_rng[0],llcrnrlat=lat_rng[0],
-                urcrnrlon=lon_rng[1],urcrnrlat=lat_rng[1],
-                projection = 'mill')
+#    lat_rng = (np.min(lat), np.max(lat))
+#    lon_rng = (np.min(lon), np.max(lon))
+#    m = Basemap(llcrnrlon=lon_rng[0],llcrnrlat=lat_rng[0],
+#                urcrnrlon=lon_rng[1],urcrnrlat=lat_rng[1],
+#                projection = 'mill')
+    m = None
 
     plt.figure(figsize = (12, 8))
     
