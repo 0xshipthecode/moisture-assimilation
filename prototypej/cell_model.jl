@@ -1,4 +1,9 @@
 
+#
+# This file contains a Julia version of the cell model dynamics except for the equilibrium computation.
+# 
+#
+
 type CellModel
     k::Int
     m_ext::Vector{Float64}
@@ -22,9 +27,8 @@ type CellModel
 end
 
 
-function advance_model(c::CellModel, Ed::Float64,
-                       Ew::Float64, r::Float64,
-                       dt::Float64, Q::Matrix{Float64})
+function advance_model(c::CellModel, Ed::Float64, Ew::Float64,
+                       r::Float64, dt::Float64, Q::Matrix{Float64})
 
     # acquire local variables
     Tk = c.Tk
@@ -32,9 +36,7 @@ function advance_model(c::CellModel, Ed::Float64,
     m_ext = c.m_ext
     m = m_ext[1:k]
     dTk = m_ext[k+1:2*k]
-    dE = m_ext[2*k+1]
-    dS = m_ext[2*k+2]
-    dTrk = m_ext[2*k+3]
+    dE, dS, dTrk = m_ext[2*k+1:2*k+3]
 
     # add assimilation deltas to moisture equilibria
     Ed += dE
@@ -106,10 +108,9 @@ function advance_model(c::CellModel, Ed::Float64,
     J[2*k+2,2*k+2] = 1.0
     J[2*k+3,2*k+3] = 1.0
 
+    # update covariance (using computed Jacobian) and state
     c.P = J*c.P*transpose(J) + Q
-
     c.m_ext[1:k] = m_new
-
 end
 
 

@@ -145,7 +145,7 @@ def run_module():
     obs_re = OnlineVarianceEstimator(np.zeros((len(stations),)), np.ones(len(stations),) * 0.1, 1)
     
     # initialize the mean field model (default fit is 1.0 of equilibrium before new information comes in)
-    mfm = MeanFieldModel()
+    mfm = MeanFieldModel(cfg['lock_gamma'])
 
     # construct model grid using standard fuel parameters
     Tk = np.array([1.0, 10.0, 100.0]) * 3600
