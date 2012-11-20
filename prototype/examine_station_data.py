@@ -6,6 +6,7 @@ from wrf_model_data import WRFModelData
 from observation_stations import Station, Observation
 from mean_field_model import MeanFieldModel
 from statistics import compute_ols_estimator
+from diagnostics import init_diagnostics, diagnostics
 
 from mpl_toolkits.basemap import Basemap
 import matplotlib.pyplot as plt
@@ -42,7 +43,7 @@ def plot_stations_vs_model_ts(stations, field_name, field, wrf_data):
         common_tm = [model_tm[t] for t in mindx]
         ax = plt.subplot(4, 2, sp)
         ax.xaxis.set_major_formatter(DateFormatter('%H:%m')) 
-        plt.plot(common_tm, obs_ts, 'ro-', common_tm, field[:, i, j], 'gx-', linewidth = 2)
+        plt.plot(common_tm, obs_ts, 'ro', common_tm, field[:, i, j], 'gx-', linewidth = 2)
         plt.title('%s vs. model %s' % (s.get_name(), field_name))
         for l in ax.get_xticklabels():
             l.set_rotation(90)
@@ -51,6 +52,8 @@ def plot_stations_vs_model_ts(stations, field_name, field, wrf_data):
 
 
 if __name__ == '__main__':
+    
+    init_diagnostics('results/examine_station_data.log')
 
     # load the smallest domain
     wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04.nc', tz_name = 'US/Pacific')
@@ -65,6 +68,10 @@ if __name__ == '__main__':
     # load station data from files
     tz = pytz.timezone('US/Pacific')
     stations = [Station(os.path.join(station_data_dir, s), tz, wrf_data) for s in station_list]
+    
+    for st in stations:
+        st.set_measurement_variance('fm10', 0.1)
+        st.set_measurement_variance('air_temp', 0.1)
     
     # construct basemap for rendering
     domain_rng = wrf_data.get_domain_extent()
@@ -90,7 +97,7 @@ if __name__ == '__main__':
     plt.plot(x, y, 'k+', markersize = 4)
         
     # part C - fit the mean field model
-    obs_data = build_observation_data(stations, 'fuel_moisture', wrf_data)
+    obs_data = build_observation_data(stations, 'fm10', wrf_data)
     gammas = []
     residuals = {}
     ot = []
@@ -113,11 +120,16 @@ if __name__ == '__main__':
     ot = np.array(ot)
 
     # part B, compare values at the same times
-    for st_field_name, field in [ ('air_temp', T[ot,:,:] - 273.15), ('fuel_moisture', E[ot,:,:])]:
+    for st_field_name, field in [ ('air_temp', T[ot,:,:] - 273.15), ('fm10', E[ot,:,:])]:
         plot_stations_vs_model_ts(stations, st_field_name, field, wrf_data)
+        plt.savefig('results/%s_station_vs_equi.png' % st_field_name)
 
     # plot fitted model
-    plot_stations_vs_model_ts(stations, 'fuel_moisture', gammas[:, np.newaxis, np.newaxis] * E[ot,:,:], wrf_data)
+    plot_stations_vs_model_ts(stations, 'fm10', gammas[:, np.newaxis, np.newaxis] * E[ot,:,:], wrf_data)
+    plt.subplot(4,2,8)
+    plt.plot(gammas)
+    plt.title('Gamma values vs observation time')
+    plt.savefig('results/%s_station_vs_fitted_equi.png' % st_field_name)
     
     for s in stations:
         print("station: %s elevation %g m" % (s.get_name(), s.get_elevation()))
@@ -136,7 +148,7 @@ if __name__ == '__main__':
             cc = np.cov(r1, r2)
             C[i,j] = cc[0, 1]
             D[i,j] = great_circle_distance(lon1, lat2, lon2, lat2)
-            E[i,j] = np.abs(stations[i].get_elevation() - stations[j].get_elevation())
+            E[i,j] = np.abs(stations[i].get_elevation() - stations[j].get_elevation()) / 1000.0
 
     f = plt.figure(figsize = (8,8))
     f.subplots_adjust(hspace = 0.5, wspace = 0.5)
@@ -175,6 +187,7 @@ if __name__ == '__main__':
     plt.xlabel('Distance [km]')
     plt.ylabel('Covariance [-]')
     plt.title('Aggregate plot of covar vs. distance')
+    plt.savefig('results/station_residuals_covariance.png')
 
 #    f = open('distance_vs_covariance.txt', 'w')
 #    for i in range(Dt.shape[0]):
@@ -186,6 +199,7 @@ if __name__ == '__main__':
     # compute CORRELATION COEFFICIENT between station residuals and plot this vs. distance
     C = np.zeros((Ns,Ns))
     D = np.zeros((Ns,Ns))
+    E = np.zeros((Ns,Ns))
     for i in range(Ns):
         r1, (lon1, lat1) = residuals[ss[i]], stations[i].get_position()
         for j in range(Ns):
@@ -194,6 +208,7 @@ if __name__ == '__main__':
             cc = np.corrcoef(r1, r2)
             C[i,j] = cc[0, 1]
             D[i,j] = great_circle_distance(lon1, lat2, lon2, lat2)
+            E[i,j] = np.abs(stations[i].get_elevation() - stations[j].get_elevation()) / 1000.0
 
     f = plt.figure(figsize = (8,8))
     f.subplots_adjust(hspace = 0.5, wspace = 0.5)
@@ -227,10 +242,11 @@ if __name__ == '__main__':
 
     plt.subplot(224)
     iu1 = np.triu_indices(Ns, 1)
+    Et = E[iu1]
     Dt = D[iu1]
     Ct = C[iu1]
-    beta = compute_ols_estimator(np.hstack([Dt[:,np.newaxis], np.ones_like(Dt[:,np.newaxis])]), Ct[:,np.newaxis])
-    print beta
+    beta, Rsq = compute_ols_estimator(np.hstack([Dt[:,np.newaxis], np.ones_like(Dt[:,np.newaxis])]), Ct[:,np.newaxis])
+    print beta, Rsq
     olsDT = beta[1] + beta[0] * Dt
     plt.plot(Dt, Ct, 'ro')
     plt.plot(Dt, olsDT, 'k-')
@@ -240,6 +256,7 @@ if __name__ == '__main__':
     plt.xlabel('Distance [km]')
     plt.ylabel('Correlation coefficient [-]')
     plt.title('Aggregate plot of cc vs. distance')
+    plt.savefig('results/station_residuals_correlation.png')
     
     plt.show()
     
