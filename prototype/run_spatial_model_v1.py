@@ -160,7 +160,7 @@ def run_module():
     plt.figure(figsize = (12, 8))
     
     # run model
-    for t in range(1, 18):
+    for t in range(1, Nt):
         model_time = wrf_data.get_times()[t]
         print("Time: %s, step: %d" % (str(model_time), t))
 
