@@ -25,7 +25,7 @@ class WRFModelData:
         self.file_name = file_name
         self.load_data(file_name, fields)
         if tz_name:
-            self.change_time_zone(tz_name)
+            self.construct_local_time(tz_name)
     
 
     def load_data(self, data_file, var_names):
@@ -59,7 +59,6 @@ class WRFModelData:
             tp.append(dt)
             
         self.fields['GMT'] = tp
-        self.fields['LT'] = tp
  
         d.close()
         
@@ -67,7 +66,7 @@ class WRFModelData:
         self.equilibrium_moisture()
 
     
-    def change_time_zone(self, tz_name):
+    def construct_local_time(self, tz_name):
         """
         Changes the local_time variable to a new timezone.  The local time
         can be accessed using the get_times() function.

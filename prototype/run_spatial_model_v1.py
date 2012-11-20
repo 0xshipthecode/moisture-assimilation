@@ -100,7 +100,7 @@ def run_module():
     diagnostics().configure_tag("assim_K", False, False, True)
     diagnostics().configure_tag("assim_obs_mod", False, False, True)
 
-    wrf_data = WRFModelData(cfg['input_file'])
+    wrf_data = WRFModelData(cfg['input_file'], tz_name = 'US/Pacific')
     
     # read in vars
     lat, lon = wrf_data.get_lats(), wrf_data.get_lons()
