@@ -115,8 +115,10 @@ def run_module():
     # construct model grid using standard fuel parameters
     Tk = np.array([1.0, 10.0, 100.0]) * 3600
     models = np.zeros(dom_shape, dtype = np.object)
+    models_na = np.zeros_like(models)
     for pos in np.ndindex(dom_shape): 
         models[pos] = CellMoistureModel((lat[pos], lon[pos]), 3, E[pos], Tk, P0 = P0)
+        models_na[pos] = CellMoistureModel((lat[pos], lon[pos]), 3, E[pos], Tk, P0 = P0)
 
     m = None
 
@@ -134,15 +136,17 @@ def run_module():
         for pos in np.ndindex(dom_shape):
             i, j = pos
             models[pos].advance_model(Ed[t, i, j], Ew[t, i, j], rain[t, i, j], dt, Q)
+            models_na[pos].advance_model(Ed[t, i, j], Ew[t, i, j], rain[t, i, j], dt, Q)
             
         # prepare visualization data        
         f = np.zeros((dom_shape[0], dom_shape[1], 3))
+        f_na = np.zeros((dom_shape[0], dom_shape[1], 3))
         for p in np.ndindex(dom_shape):
             f[p[0], p[1], :] = models[p].get_state()[:3]
+            f_na[p[0], p[1], :] = models_na[p].get_state()[:3]
             mV[pos] = models[p].get_state_covar()[1,1]
-            
-        
-        # check if we are to update the mean field model first
+
+        # run Kriging on each observed fuel type
         Kf = []
         Vf = []
         fn = []
@@ -158,6 +162,8 @@ def run_module():
                 # use this to update observation residual standard deviation 
                 obs_vals = np.array([o.get_value() for o in obs_data[model_time]])
                 ngp_vals = np.array([base_field[o.get_nearest_grid_point()] for o in obs_data[model_time]])
+                mod_vals = np.array([f[:,:,fuel_ndx][o.get_nearest_grid_point()] for o in obs_data[model_time]])
+                mod_na_vals = np.array([f_na[:,:,fuel_ndx][o.get_nearest_grid_point()] for o in obs_data[model_time]])
                 obs_re.update_with(obs_vals - ngp_vals)
                 diagnostics().push("kriging_obs_res_var", (t, np.mean(obs_re.get_variance())))
             
@@ -173,7 +179,7 @@ def run_module():
                                                             predicted_field, wrf_data, mresV ** 0.5, t)
 
                 krig_vals = np.array([Kf_fn[o.get_nearest_grid_point()] for o in obs_data[model_time]])                
-                diagnostics().push("assim_data", (t, fuel_ndx, obs_vals, ngp_vals, krig_vals))
+                diagnostics().push("assim_data", (t, fuel_ndx, obs_vals, ngp_vals, krig_vals, mod_vals, mod_na_vals))
 
                 
                 # append to storage for kriged fields in this time instant
@@ -208,45 +214,47 @@ def run_module():
         for p in np.ndindex(dom_shape):
             f[p[0], p[1], :] = models[p].get_state()[:3]
             
-#        plt.clf()
-#        plt.subplot(3,3,1)
-#        render_spatial_field_fast(m, lon, lat, f[:,:,0], '1-hr fuel')
-#        plt.clim([0.0, maxE])
-#        plt.colorbar()
-#        plt.subplot(3,3,2)
-#        render_spatial_field_fast(m, lon, lat, f[:,:,1], '10-hr fuel')
-#        plt.clim([0.0, maxE])        
-#        plt.colorbar()
-#        plt.subplot(3,3,3)
-#        render_spatial_field_fast(m, lon, lat, f[:,:,2], '100-hr fuel')
-#        plt.clim([0.0, maxE])        
-#        plt.colorbar()
-#        plt.subplot(3,3,4)
-#        render_spatial_field_fast(m, lon, lat, predicted_field, 'Mean field Fit')
-#        plt.clim([0.0, maxE])        
-#        plt.colorbar()
-#        plt.subplot(3,3,5)
-#        render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain for 10-hr fuel')       
-#        plt.clim([0.0, 1.0])        
-#        plt.colorbar()
-#        plt.subplot(3,3,6)
+        plt.clf()
+        plt.subplot(3,3,1)
+        render_spatial_field_fast(m, lon, lat, f[:,:,0], '1-hr fuel')
+        plt.clim([0.0, maxE])
+        plt.colorbar()
+        plt.subplot(3,3,2)
+        render_spatial_field_fast(m, lon, lat, f[:,:,1], '10-hr fuel')
+        plt.clim([0.0, maxE])        
+        plt.colorbar()
+        plt.subplot(3,3,3)
+        render_spatial_field_fast(m, lon, lat, f[:,:,2], '100-hr fuel')
+        plt.clim([0.0, maxE])        
+        plt.colorbar()
+        plt.subplot(3,3,4)
+        render_spatial_field_fast(m, lon, lat, predicted_field, 'Mean field Fit')
+        plt.clim([0.0, maxE])        
+        plt.colorbar()
+        plt.subplot(3,3,5)
+        render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain for 10-hr fuel')       
+        plt.clim([0.0, 1.0])        
+        plt.colorbar()
+        plt.subplot(3,3,6)
 #        render_spatial_field_fast(m, lon, lat, mV, '10-hr fuel variance')
 #        plt.clim([0.0, np.max(mV)]) 
-#        plt.colorbar()
-#        plt.subplot(3,3,7)
-#        render_spatial_field_fast(m, lon, lat, Kf_fn, 'Kriged observations')
-#        plt.clim([0.0, maxE])
-#        plt.colorbar()
-#        plt.subplot(3,3,8)
-#        render_spatial_field_fast(m, lon, lat, Vf_fn, 'Kriging variance')
-#        plt.clim([0.0, np.max(Vf_fn)])
-#        plt.colorbar()
-#        plt.subplot(3,3,9)
-#        render_spatial_field_fast(m, lon, lat, mresV, 'Model res. variance')
-#        plt.clim([0.0, np.max(mresV)])
-#        plt.colorbar()
-#        
-#        plt.savefig(os.path.join(cfg['output_dir'], 'moisture_model_t%03d.png' % t))
+        render_spatial_field_fast(m, lon, lat, f_na[:,:,1], '10hr fuel - no assim')
+        plt.clim([0.0, maxE])
+        plt.colorbar()
+        plt.subplot(3,3,7)
+        render_spatial_field_fast(m, lon, lat, Kf_fn, 'Kriged observations')
+        plt.clim([0.0, maxE])
+        plt.colorbar()
+        plt.subplot(3,3,8)
+        render_spatial_field_fast(m, lon, lat, Vf_fn, 'Kriging variance')
+        plt.clim([0.0, np.max(Vf_fn)])
+        plt.colorbar()
+        plt.subplot(3,3,9)
+        render_spatial_field_fast(m, lon, lat, mresV, 'Model res. variance')
+        plt.clim([0.0, np.max(mresV)])
+        plt.colorbar()
+        
+        plt.savefig(os.path.join(cfg['output_dir'], 'moisture_model_t%03d.png' % t))
 
         # push new diagnostic outputs
         diagnostics().push("assim_K", (t, np.mean(Kg[:,:,0])))
@@ -276,14 +284,18 @@ def run_module():
         # get data for the i-th station
         t_i = [ o[0] for o in diagnostics().pull("assim_data") ]
         obs_i = [ o[2][i] for o in diagnostics().pull("assim_data") ]
-        mod_i = [ o[3][i] for o in diagnostics().pull("assim_data") ]
+        bf_i = [ o[3][i] for o in diagnostics().pull("assim_data") ]
         krig_i = [ o[4][i] for o in diagnostics().pull("assim_data") ]
-        mx = max(max(obs_i), max(mod_i), max(krig_i))
+        mod_i = [ o[5][i] for o in diagnostics().pull("assim_data") ]
+        mod_na_i = [ o[6][i] for o in diagnostics().pull("assim_data") ]
+        mx = max(max(obs_i), max(mod_i), max(krig_i), max(mod_i))
         plt.plot(t_i, obs_i, 'ro')
-        plt.plot(t_i, mod_i, 'gx-')
+        plt.plot(t_i, bf_i, 'gx-')
         plt.plot(t_i, krig_i, 'bo-')
+        plt.plot(t_i, mod_i, 'kx-', linewidth = 1.5)
+        plt.plot(t_i, mod_na_i, 'mx-')
         plt.ylim([0.0, 1.1 * mx])
-        plt.legend(['Obs.', 'Model', 'Kriged'])
+        plt.legend(['Obs.', 'Base field', 'Kriged', 'Model', 'NoAssim'])
         plt.title('Station observations fit to model and kriging field')
         plt.savefig(os.path.join(cfg['output_dir'], 'station%02d.png' % (i+1)))
         
