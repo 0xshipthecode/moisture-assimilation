@@ -1,0 +1,17 @@
+# Ignore compiled python files
+*.pyc
+# Ignore c source files
+*.c
+# Ignore shared libs
+*.so
+# Ignore html files
+*.html
+# Ignore auxiliary directories
+prototype/model_outputs/
+prototype/results/
+prototype/figures/
+real_data/
+# Ignore eclipse project files
+.project
+.pydevproject
+.settings/
