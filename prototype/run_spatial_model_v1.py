@@ -5,7 +5,6 @@ Created on Sun Oct 28 18:14:36 2012
 @author: martin
 """
 
-
 from spatial_model_utilities import render_spatial_field_fast, great_circle_distance
 from time_series_utilities import build_observation_data
 
@@ -16,6 +15,7 @@ from cell_model_opt import CellMoistureModel
 from mean_field_model import MeanFieldModel
 from observation_stations import Station
 from diagnostics import init_diagnostics, diagnostics
+from online_variance_estimator import OnlineVarianceEstimator
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -38,48 +38,6 @@ station_list = [  "Julian_Moisture",
 station_data_dir = "../real_data/witch_creek/"
 
 
-
-class OnlineVarianceEstimator:
-    """
-    This class keeps an estimate of the running mean and variance of a field.
-    Online algorithm taken from wikipedia [attributed to D. Knuth]
-    http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-    """
-    
-    def __init__(self, imean, ivar, iN):
-        """
-        Initialize with prior information.  
-        """
-        self.mean = imean
-        self.M2 = ivar
-        self.N = iN
-        
-
-    def update_with(self, ndata):
-        """
-        Acquire new sample and update the field statistics.
-        """
-        self.N += 1
-        delta = ndata - self.mean
-        self.mean += delta / self.N
-        self.M2 += delta * (ndata - self.mean)
-         
-         
-    def get_variance(self):
-        """
-        Return the current variance estimate.
-        """
-        return self.M2 / (self.N - 1)
-    
-
-    def get_mean(self):
-        """
-        Returns the estimate of the current mean.
-        """
-        return self.mean
-        
-
-
 def run_module():
     
     # read in configuration file to execute run
@@ -97,8 +55,11 @@ def run_module():
     diagnostics().configure_tag("skdm_obs_res", False, True, True)
     diagnostics().configure_tag("skdm_cov_cond", False, True, True)
 
+    diagnostics().configure_tag("assim_mV", False, False, True)
     diagnostics().configure_tag("assim_K", False, False, True)
     diagnostics().configure_tag("assim_obs_mod", False, False, True)
+    diagnostics().configure_tag("assim_mresV", False, False, True)
+    diagnostics().configure_tag("assim_Vf_fn", False, False, True)
 
     wrf_data = WRFModelData(cfg['input_file'], tz_name = 'US/Pacific')
     
@@ -178,7 +139,7 @@ def run_module():
             f[p[0], p[1], :] = models[p].get_state()[:3]
             mV[pos] = models[p].get_state_covar()[1,1]
             
-
+        
         # check if we are to update the mean field model first
         Kf = []
         Vf = []
@@ -275,7 +236,7 @@ def run_module():
         plt.colorbar()
         plt.subplot(3,3,8)
         render_spatial_field_fast(m, lon, lat, Vf_fn, 'Kriging variance')
-        plt.clim([np.min(Vf_fn), np.max(Vf_fn)])
+        plt.clim([0.0, np.max(Vf_fn)])
         plt.colorbar()
         plt.subplot(3,3,9)
         render_spatial_field_fast(m, lon, lat, mresV, 'Model res. variance')
@@ -283,6 +244,13 @@ def run_module():
         plt.colorbar()
         
         plt.savefig(os.path.join(cfg['output_dir'], 'moisture_model_t%03d.png' % t))
+
+        # push new diagnostic outputs
+        diagnostics().push("assim_K", (t, np.mean(Kg[:,:,0])))
+        diagnostics().push("assim_mV", (t, np.mean(mV)))
+        diagnostics().push("assim_mresV", (t, np.mean(mresV)))
+        diagnostics().push("assim_Vf_fn", (t, np.mean(Vf_fn)))
+
         
     # store the gamma coefficients
     with open(os.path.join(cfg['output_dir'], 'gamma.txt'), 'w') as f:
@@ -317,10 +285,17 @@ def run_module():
         plt.savefig(os.path.join(cfg['output_dir'], 'station%02d.png' % (i+1)))
         
     plt.figure()
-    plt.plot([d[0] for d in diagnostics().pull("assim_K")], [d[1] for d in diagnostics().pull("assim_K")], 'ro-')
+    plt.plot([d[0] for d in diagnostics().pull("assim_K")],
+             [d[1] for d in diagnostics().pull("assim_K")], 'ro-')
     plt.title('Average Kalman gain')
     plt.savefig(os.path.join(cfg['output_dir'], 'plot_kalman_gain.png'))
     
+    plt.figure()
+    plt.plot([d[0] for d in diagnostics().pull("assim_mV")],
+             [d[1] for d in diagnostics().pull("assim_mV")], 'ro-')
+    plt.title('Average model variance')
+    plt.savefig(os.path.join(cfg['output_dir'], 'plot_fm10_model_variance.png'))
+
     diagnostics().dump_store(os.path.join(cfg['output_dir'], 'diagnostics.bin'))
     
     # as a last step encode all the frames as video
