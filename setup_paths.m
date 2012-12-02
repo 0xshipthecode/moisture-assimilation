@@ -9,7 +9,6 @@ if(~exist('ukf_select_sigma_points.m','file'))
   addpath(fullfile(cp, 'state_model'));
   addpath(fullfile(cp, 'tests'));
   addpath(fullfile(cp, 'ukf'));
-  addpath(fullfile(cp, 'spatial_field_model'));
   addpath(fullfile(cp, 'distributed_model'));
   addpath(fullfile(cp, 'model_functions'));
 end

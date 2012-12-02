@@ -134,7 +134,10 @@ cdef class CellMoistureModel:
         
         # update model state covariance if requested using the old state (the jacobian must be computed as well)
         cdef np.ndarray[np.float64_t, ndim=2] J = self.J
-        cdef float dmi_dchng, dmi_dequi 
+        cdef float dmi_dchng, dmi_dequi
+	
+	# zero out the Jacobian and compute a new one if required
+        J[:,:] = 0.0
         if mQ is not None:
             for i in range(k):
             
@@ -162,13 +165,12 @@ cdef class CellMoistureModel:
                                 
             
                 # branch according to the currently active model
-                if r <= r0:
+                if r <= r0 and model_ids[i] != 4:
                     
-                    # drying/wetting model active
-        
-                    # if drying/wetting model active, jacobian entry w.r.t. equilibrium is nonzero
-                    # it is zero if the 'dead zone' model is active
+                    # if drying/wetting model active, jacobian entry w.r.t. equilibrium and Tk is nonzero
                     if model_ids[i] != 4:
+
+		    	# partial m_i/partial dE
                         J[i, 2*k] = dmi_dequi
         
                     	# partial m_i/partial delta_Tk
@@ -215,6 +217,13 @@ cdef class CellMoistureModel:
         """
         return self.P
         
+    def get_model_ids(self):
+        """
+        Return the ids [1..4] of the models that switched on during last model
+	advance.
+        """
+        return self.model_ids
+
     
     def kalman_update(self, O, V, fuel_types):
         """

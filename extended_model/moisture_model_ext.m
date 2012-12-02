@@ -87,8 +87,8 @@ function [m_ext, model_ids] = moisture_model_ext(T, Tk, Q, P, m_ext, f_info, r, 
     rlag(rain_model) = 1.0 / (Trk + dlt_Trk) .* (1 - exp(- (r(f_loc(rain_model)) - r0) / rk));
     
     % equilibrium is selected according to current moisture level
-    equi(~rain_model & equi > Ed(f_loc)) = Ed(f_loc(~rain_model & equi > Ed(f_loc)));
-    equi(~rain_model & equi < Ew(f_loc)) = Ew(f_loc(~rain_model & equi < Ew(f_loc)));
+    equi(~rain_model & m > Ed(f_loc)) = Ed(f_loc(~rain_model & m > Ed(f_loc)));
+    equi(~rain_model & m < Ew(f_loc)) = Ew(f_loc(~rain_model & m < Ew(f_loc)));
     model_ids(~rain_model) = (m(~rain_model) > Ed(f_loc(~rain_model))) * 1 ...
                            + (m(~rain_model) < Ew(f_loc(~rain_model))) * 2;
     model_ids(~model_ids) = 4;

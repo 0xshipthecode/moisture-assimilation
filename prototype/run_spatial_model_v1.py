@@ -92,9 +92,7 @@ def run_module():
     E = 0.5 * (Ed[1,:,:] + Ew[1,:,:])
     
     # set up parameters
-    Q = np.zeros((9,9))
-    for i in range(3):
-    	Q[i,i] = 0.0001
+    Q = np.eye(9) * 0.0001
     P0 = np.eye(9) * 0.001
     dt = 10.0 * 60
     K = np.zeros_like(E)
@@ -105,6 +103,7 @@ def run_module():
     mresV = np.zeros_like(E)
     Kf_fn = np.zeros_like(E)
     Vf_fn = np.zeros_like(E)
+    mid = np.zeros_like(E)
     Kg = np.zeros((dom_shape[0], dom_shape[1], 1))
     
     # moisture state and observation residual variance estimators
@@ -147,6 +146,7 @@ def run_module():
             f[p[0], p[1], :] = models[p].get_state()[:3]
             f_na[p[0], p[1], :] = models_na[p].get_state()[:3]
             mV[pos] = models[p].get_state_covar()[1,1]
+	    mid[p] = models[p].get_model_ids()[1]
 
         # run Kriging on each observed fuel type
         Kf = []
@@ -226,8 +226,10 @@ def run_module():
         plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,3)
-        render_spatial_field_fast(m, lon, lat, f[:,:,2], '100-hr fuel')
-        plt.clim([0.0, maxE])        
+#        render_spatial_field_fast(m, lon, lat, f[:,:,2], '100-hr fuel')
+	render_spatial_field_fast(m, lon, lat, mid, 'Model ids')
+#        plt.clim([0.0, maxE])        
+	plt.clim([0.0, 5.0])
         plt.colorbar()
         plt.subplot(3,3,4)
         render_spatial_field_fast(m, lon, lat, predicted_field, 'Mean field Fit')
