@@ -79,10 +79,11 @@ function Jm_ext = moisture_tangent_model_ext(T, Tk, Q, P, m_ext, f_info, r, dt)
     % location
     equi = m;  % copy over current equilibrium levels
     rlag = zeros(nk,1);
+    model_ids = zeros(nk,1);
     
     % equilibrium is equal to the saturation level (assimilated)
     rain_model = r(f_loc) > r0;
-    equi(rain_model) = (S + dlt_S);
+    equi(rain_model) = S + dlt_S;
 
     % rlag is modified by the rainfall intensity (assimilated)
     rlag(rain_model) = 1.0 / (Trk + dlt_Trk) .* (1 - exp(- (r(f_loc(rain_model)) - r0) / rk));
@@ -90,6 +91,9 @@ function Jm_ext = moisture_tangent_model_ext(T, Tk, Q, P, m_ext, f_info, r, dt)
     % equilibrium is selected according to current moisture level
     equi(~rain_model & equi > Ed(f_loc)) = Ed(f_loc(~rain_model & equi > Ed(f_loc)));
     equi(~rain_model & equi < Ew(f_loc)) = Ew(f_loc(~rain_model & equi < Ew(f_loc)));
+    model_ids(~rain_model) = (m(~rain_model) > Ed(f_loc(~rain_model))) * 1 ...
+                           + (m(~rain_model) < Ew(f_loc(~rain_model))) * 2;
+    model_ids(~model_ids) = 4;
     
     % the inverted time lag is constant according to fuel category
     % modified model: time constants for fuels are affected by
@@ -105,7 +109,11 @@ function Jm_ext = moisture_tangent_model_ext(T, Tk, Q, P, m_ext, f_info, r, dt)
         if(change(i) < 0.01)
             
             % partial m_i/partial m_i
-            Jm_ext(i,i) = exp(-change(i));
+            if(model_ids(i) < 4)
+                Jm_ext(i,i) = exp(-change(i));
+            else
+                Jm_ext(i,i) = 1.0;
+            end
             
             % precompute partial m_i/partial change
             dmi_dchng = (equi(i) - m(i)) * exp(-change(i));
@@ -116,7 +124,11 @@ function Jm_ext = moisture_tangent_model_ext(T, Tk, Q, P, m_ext, f_info, r, dt)
         else
             
             % partial dm_i/partial m_i
-            Jm_ext(i,i) = 1.0 - change(i) * (1 - 0.5 * change(i));
+            if(model_ids(i) < 4)
+                Jm_ext(i,i) = 1.0 - change(i) * (1 - 0.5 * change(i));
+            else
+                Jm_ext(i,i) = 1.0;
+            end
             
             % partial m_i/partial change
             dmi_dchng = (equi(i) - m(i)) * (1.0 - change(i));
@@ -131,13 +143,12 @@ function Jm_ext = moisture_tangent_model_ext(T, Tk, Q, P, m_ext, f_info, r, dt)
         if(r <= r0)
             
             % drying/wetting model active
-
-            % partial m_i/partial delta_Tk
-            Jm_ext(i,nk+i) = dmi_dchng * (-dt) * (Tk(k) + dlt_Tk(k))^(-2);
-
-            % if drying/wetting model active, jacobian entry is nonzero;
-            % it is zero if the 'dead zone' model is active
             if((m(i) > Ed(f_loc(i))) || (m(i) < Ew(f_loc(i))))
+
+                % partial m_i/partial delta_Tk
+                Jm_ext(i,nk+i) = dmi_dchng * (-dt) * (Tk(i) + dlt_Tk(i))^(-2);
+                
+                % partial m_i/partial delta_E
                 Jm_ext(i,nk+k+1) = dmi_dequi;
             end
 
@@ -152,13 +163,19 @@ function Jm_ext = moisture_tangent_model_ext(T, Tk, Q, P, m_ext, f_info, r, dt)
             Jm_ext(i,nk+k+3) = dmi_dchng * dt * (exp(-(r - r0)/rk) - 1) * (Trk + dlt_Trk)^(-2);
 
         end
-        
-        % delta_Tk for each fuel have no dependencies except previous delta_Tk
-        Jm_ext(nk+i, nk+i) = 1.0;        
-        
+                
+    end
+    
+    % delta_Tk for each fuel have no dependencies except previous delta_Tk
+    for i=1:k
+        Jm_ext(nk+i, nk+i) = 1.0;
+%        Jm_ext(nk+i, nk+i) = 0.99;
     end
     
     % the equilibrium constants 
     Jm_ext(nk+k+1, nk+k+1) = 1.0;
     Jm_ext(nk+k+2, nk+k+2) = 1.0;
     Jm_ext(nk+k+3, nk+k+3) = 1.0;
+%     Jm_ext(nk+k+1, nk+k+1) = 0.99;
+%     Jm_ext(nk+k+2, nk+k+2) = 0.99;
+%     Jm_ext(nk+k+3, nk+k+3) = 0.99;

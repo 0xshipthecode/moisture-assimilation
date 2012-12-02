@@ -7,7 +7,8 @@
 # Ignore html files
 *.html
 # Ignore auxiliary directories
-prototype/model_outputs/
+spatial_field_model/
+prototype/model_outputs*/
 prototype/results/
 prototype/figures/
 real_data/

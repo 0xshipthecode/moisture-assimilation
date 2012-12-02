@@ -111,4 +111,5 @@ function [m_ext, model_ids] = moisture_model_ext(T, Tk, Q, P, m_ext, f_info, r, 
     
     % modified model: delta variables do not evolve in model, only during
     % assimilation
+%    m_ext(nk+1:nk+k+3) = 0.99 * m_ext(nk+1:nk+k+3);
 

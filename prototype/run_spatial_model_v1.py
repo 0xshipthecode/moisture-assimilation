@@ -92,7 +92,9 @@ def run_module():
     E = 0.5 * (Ed[1,:,:] + Ew[1,:,:])
     
     # set up parameters
-    Q = np.eye(9) * 0.0001
+    Q = np.zeros((9,9))
+    for i in range(3):
+    	Q[i,i] = 0.0001
     P0 = np.eye(9) * 0.001
     dt = 10.0 * 60
     K = np.zeros_like(E)

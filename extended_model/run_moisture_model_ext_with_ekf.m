@@ -12,13 +12,18 @@ N = length(t);
 T = 300;            % surface temperature, Kelvin
 q = 0.005;          % water vapor content (dimensionless)
 p = 101325;         % surface pressure, Pascals
-n_k = 2;            % number of fuel categories
-Tk = [10, 100]' * 3600;  % time lags for fuel categories
+%n_k = 2;            % number of fuel categories
+%Tk = [10, 100]' * 3600;  % time lags for fuel categories
+n_k = 1;
+Tk = 10 * 3600;
+
 Ndim = n_k + n_k + 3;
 
-
-f_type = [1,2]';
-f_loc = [1, 1]';
+% construct fuel info
+% f_type = [1,2]';
+% f_loc = [1, 1]';
+f_type = [1]';
+f_loc = [1]';
 f_info = [ f_type, f_loc ];
 
 % external driving: rainfall characteristics
@@ -27,11 +32,12 @@ r((t > 5) .* (t < 65) > 0) = 1.1; % 2mm of rainfall form hour 5 to 65
 
 % measured moisture at given times
 obs_time = [2, 20, 50, 110, 140]';   % observation time in hours
-obs_moisture = [ 0.05,  0.045; ...
-                 0.3, 0.2; ...
-                 0.7, 0.6; ...
-                 0.03, 0.04; ...
-                 0.032, 0.035]; % measurements for the n_k fuel classes
+obs_moisture = [ 0.05;  ... % ,0.045; ...
+                 0.3; ... % ,0.2; ...
+                 0.7; ... % ,0.6; ...
+                 0.03; ... % ,0.04; ...
+                 0.032 ... % ,0.035
+               ]; % measurements for the n_k fuel classes
 N_obs = length(obs_time);
 current_obs = 1;
 
@@ -42,8 +48,9 @@ m_ext(1:n_k) = 0.03;
 P = eye(Ndim) * 0.01;   % error covariance of the initial guess
 
 % Kalman filter Q (model error covariance) and R (measurement error covar)
-Q = eye(Ndim) * 0.01;
-R = eye(n_k) * 0.5;
+Q = zeros(Ndim);
+Q(1:n_k, 1:n_k) = eye(n_k) * 0.001;
+R = eye(n_k) * 0.05;
 
 % the observation operator is a n_k x Ndim matrix with I_(n_k) on the left
 H = zeros(n_k, Ndim);
@@ -111,7 +118,8 @@ for i=2:N
         m_f(i,:) = m_pred + K*(m_measured - H*m_pred);
         
         % state error covariance is reduced by the observation
-        P = P - K*S*K';
+        P_red = K*S*K';
+        P = P - P_red;
     
     else
         
@@ -124,15 +132,16 @@ end
 
 figure;
 subplot(311);
-plot(t, m_f(:,1), 'g-', 'linewidth', 2);
+plot(t, m_f(:,1), 'r-', 'linewidth', 2);
 hold on;
-plot(repmat(t, 1, 2), [m_f(:,1) - sqrt(sP(:, 1, 1)), m_f(:,1) + sqrt(sP(:, 1, 1))], 'gx');
-plot(t, m_n(:,1), 'r-', 'linewidth', 2);
+plot(t, m_n(:,1), 'g-', 'linewidth', 2);
 plot(t, r, 'k--', 'linewidth', 2);
-plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'b');
-h = legend('system + EKF', '$$m - \sigma$$', '$$m + \sigma$$', 'raw system', 'rainfall [mm/h]', 'observations');
-set(h, 'interpreter', 'latex');
-title('Plot of the evolution of the moisture model [EKF]', 'fontsize', 16);
+plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'm');
+plot(repmat(t, 1, 2), [m_f(:,1) - sqrt(sP(:, 1, 1)), m_f(:,1) + sqrt(sP(:, 1, 1))], 'rx');
+h = legend('system + EKF', 'raw system', 'rainfall [mm/h]', 'observations', 'orientation', 'horizontal');
+%set(h, 'interpreter', 'latex');
+set(h, 'fontsize', 14);
+title('Plot of the evolution of the moisture model [EKF]', 'fontsize', 18);
 
 % select time indices corresponding to observation times
 [I,J] = ind2sub([N_obs, N], find(repmat(t', N_obs, 1) == repmat(obs_time, 1, N)));
@@ -143,8 +152,11 @@ plot(t, log10(trJ), 'k-', 'linewidth', 2);
 plot(obs_time, log10(trS(J)), 'ko', 'markerfacecolor', 'green', 'markersize', 6);
 plot(obs_time, log10(trK(J)), 'ko', 'markerfacecolor', 'red', 'markersize', 6);
 hold off;
-legend('State', 'Jacobian', 'Innovation', 'Kalman gain');
-title('Kalman filter: log(generalized variance) of covar/Kalman matrices vs. time [EKF]', 'fontsize', 16);
+a = axis();
+axis([a(1) a(2) a(3) max(a(4), 1.0)]);
+h = legend('State', 'Jacobian', 'Innovation', 'Kalman gain', 'orientation', 'horizontal');
+set(h, 'fontsize', 14);
+title('Kalman filter: log(generalized variance) of covar/Kalman matrices vs. time [EKF]', 'fontsize', 18);
 
 subplot(313);
 plot(t, sP(:, 1, 1), 'r-', 'linewidth', 2);
@@ -153,19 +165,22 @@ plot(t, sP(:, 1, 2), 'g-', 'linewidth', 2);
 plot(t, sP(:, 1, 3), 'b-', 'linewidth', 2);
 plot(t, sP(:, 1, 4), 'k-', 'linewidth', 2);
 plot(t, sP(:, 1, 5), 'm-', 'linewidth', 2);
+plot(t, sP(:, 2, 2), 'g--', 'linewidth', 2);
+plot(t, sP(:, 3, 3), 'b--', 'linewidth', 2);
 hold off
-legend('var(m)', 'cov(m,dT)', 'cov(m,dE)', 'cov(m,dS)', 'cov(m,dTr)');
-title('Covariance between moisture and system parameters [EKF]');
+h = legend('var(m)', 'cov(m,dT)', 'cov(m,dE)', 'cov(m,dS)', 'cov(m,dTr)', 'orientation', 'horizontal');
+set(h, 'fontsize', 14);
+title('Covariance between moisture and system parameters [EKF]', 'fontsize', 18);
 
 figure;
 subplot(311);
 plot(repmat(t, 1, 2), m_f(:,[2,5]), 'linewidth', 2);
-title('Time constant changes');
+title('Time constant changes', 'fontsize', 18);
 legend('dTk1', 'dTrk');
 subplot(312);
 plot(repmat(t, 1, 2), m_f(:, [3,4]), 'linewidth', 2);
 legend('dE', 'dS');
-title('Equilibrium changes');
+title('Equilibrium changes', 'fontsize', 18);
 subplot(313);
 plot(t, model_ids, 'or');
-title('Active submodel of the moisture model [EKF]');
+title('Active submodel of the moisture model [EKF]', 'fontsize', 18);

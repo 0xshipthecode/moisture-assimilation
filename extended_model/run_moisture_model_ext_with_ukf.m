@@ -13,9 +13,18 @@ N = length(t);
 T = 300;            % surface temperature, Kelvin
 q = 0.005;          % water vapor content (dimensionless)
 p = 101325;         % surface pressure, Pascals
-n_k = 2;            % number of fuel categories
-Tk = [10, 100]' * 3600;  % time lags for fuel categories
+% n_k = 2;            % number of fuel categories
+% Tk = [10, 100]' * 3600;  % time lags for fuel categories
+n_k = 1;            % number of fuel categories
+Tk = 10 * 3600;  % time lags for fuel categories
 Ndim = 2*n_k + 3;
+
+% construct fuel info
+% f_type = [1,2]';
+% f_loc = [1, 1]';
+f_type = [1]';
+f_loc = [1]';
+f_info = [ f_type, f_loc ];
 
 % external driving: rainfall characteristics
 r = zeros(N,1);
@@ -23,11 +32,12 @@ r((t > 5) .* (t < 65) > 0) = 1.1; % 2mm of rainfall form hour 5 to 65
 
 % measured moisture at given times
 obs_time = [2, 20, 50, 110, 140]';   % observation time in hours
-obs_moisture = [ 0.05,  0.045; ...
-                 0.3, 0.2; ...
-                 0.7, 0.6; ...
-                 0.03, 0.04; ...
-                 0.032, 0.035]; % measurements for the n_k fuel classes
+obs_moisture = [ 0.05; %,  0.045; ...
+                 0.3; %, 0.2; ...
+                 0.7; %, 0.6; ...
+                 0.03; %, 0.04; ...
+                 0.032; %, 0.035 ... % measurements for the n_k fuel classes
+                 ];
 
 N_obs = length(obs_time);
 current_obs = 1;
@@ -39,8 +49,9 @@ m_ext(1:n_k) = 0.03;
 P = eye(Ndim) * 0.01;   % error covariance of the initial guess
 
 % Kalman filter Q (model error covariance) and R (measurement error covar)
-Q = eye(Ndim) * 0.01;
-R = eye(n_k) * 0.5;
+Q = zeros(Ndim);
+Q(1:n_k, 1:n_k) = eye(n_k) * 0.001;
+R = eye(n_k) * 0.1;
 
 % the observation operator is a n_k x Ndim matrix with I_(n_k) on the left
 H = zeros(n_k, Ndim);
@@ -81,7 +92,7 @@ for i = 2:N
     sigma_pts(i, :, :) = m_sigma;
     
     % compute & store results for system without Kalman filtering
-    m_n(i, :) = moisture_model_ext(T, Tk, q, p, m_n(i-1,:)', r(i), dt);
+    m_n(i, :) = moisture_model_ext(T, Tk, q, p, m_n(i-1,:)', f_info, r(i), dt);
 
     % UKF prediction step - run the sigma set through the nonlinear
     % function
@@ -89,9 +100,9 @@ for i = 2:N
     % estimate new moisture mean based on last best guess (m)
     m_sigma_1 = zeros(Ndim, Npts);
     for n=1:Npts-1
-        m_sigma_1(:,n) = moisture_model_ext(T, Tk, q, p, m_sigma(:,n), r(i), dt);
+        m_sigma_1(:,n) = moisture_model_ext(T, Tk, q, p, m_sigma(:,n), f_info, r(i), dt);
     end
-    [m_sigma_1(:,Npts), model_ids(i,:)] = moisture_model_ext(T, Tk, q, p, m_f(i-1,:)', r(i), dt);
+    [m_sigma_1(:,Npts), model_ids(i,:)] = moisture_model_ext(T, Tk, q, p, m_f(i-1,:)', f_info, r(i), dt);
     
     % compute the prediction mean x_mean(i|i-1)
     m_pred = sum(m_sigma_1 * diag(w), 2);
@@ -123,7 +134,7 @@ for i = 2:N
         Cxy = (m_sigma_1 - repmat(m_pred, 1, Npts)) * diag(w) * (Y - repmat(y_pred, 1, Npts))';
         
         % Kalman gain is inv(S) * P for this case (direct observation)
-        K = Cxy * inv(S);
+        K = Cxy / S;
         %trK(i) = trace(K);
         trK(i) = prod(eig(K(1:n_k,1:n_k)));
         
@@ -148,14 +159,14 @@ end
 
 figure;
 subplot(311);
-plot(t, m_f(:,1), 'g-', 'linewidth', 2);
+plot(t, m_f(:,1), 'r-', 'linewidth', 2);
 hold on;
-plot(repmat(t, 1, 2), [m_f(:,1) - sqrt(sP(:, 1, 1)), m_f(:,1) + sqrt(sP(:, 1, 1))], 'gx');
-plot(t, m_n(:,1), 'r-', 'linewidth', 2);
+plot(t, m_n(:,1), 'g-', 'linewidth', 2);
 plot(t, r, 'k--', 'linewidth', 2);
-plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'b');
-h = legend('system + UKF', '$$m - \sigma$$', '$$m + \sigma$$', 'raw system', 'rainfall [mm/h]', 'observations');
-set(h, 'interpreter', 'latex');
+plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'm');
+plot(repmat(t, 1, 2), [m_f(:,1) - sqrt(sP(:, 1, 1)), m_f(:,1) + sqrt(sP(:, 1, 1))], 'rx');
+h = legend('system + UKF', 'raw system', 'rainfall [mm/h]', 'observations', 'orientation', 'horizontal');
+%set(h, 'interpreter', 'latex');
 title('Plot of the evolution of the moisture model [UKF]', 'fontsize', 16);
 
 % select time indices corresponding to observation times
@@ -176,6 +187,8 @@ plot(t, sP(:, 1, 2), 'g-', 'linewidth', 2);
 plot(t, sP(:, 1, 3), 'b-', 'linewidth', 2);
 plot(t, sP(:, 1, 4), 'k-', 'linewidth', 2);
 plot(t, sP(:, 1, 5), 'm-', 'linewidth', 2);
+plot(t, sP(:, 2, 2), 'g--', 'linewidth', 2);
+plot(t, sP(:, 3, 3), 'b--', 'linewidth', 2);
 hold off
 legend('var(m)', 'cov(m,dT)', 'cov(m,dE)', 'cov(m,dS)', 'cov(m,dTr)');
 title('Covariance between moisture and system parameters [UKF]');

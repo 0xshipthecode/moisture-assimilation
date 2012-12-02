@@ -107,7 +107,7 @@ class CellMoistureModel:
                 if change[i] < 0.01:
                     
                     # partial m_i/partial m_i
-                    J[i,i] = math.exp(-change[i])
+                    J[i,i] = math.exp(-change[i]) if model_ids[i] != 4 else 1.0
                     
                     # precompute partial m_i/partial change
                     dmi_dchng = (equi[i] - m[i]) * math.exp(-change[i])
@@ -118,7 +118,7 @@ class CellMoistureModel:
                 else:
                     
                     # partial dm_i/partial m_i
-                    J[i,i] = 1.0 - change[i] * (1 - 0.5 * change[i])
+                    J[i,i] = 1.0 - change[i] * (1 - 0.5 * change[i]) if model_ids[i] != 4 else 1.0
                     
                     # partial m_i/partial change
                     dmi_dchng = (equi[i] - m[i]) * (1.0 - change[i])
@@ -128,18 +128,14 @@ class CellMoistureModel:
                                 
             
                 # branch according to the currently active model
-                if r <= self.r0:
+                if r <= self.r0 and model_ids[i] != 4:
                     
-                    # drying/wetting model active
+                    # partial m_i/delta E
+                    J[i, 2*k] = dmi_dequi
         
                     # partial m_i/partial delta_Tk
                     J[i,k+i] = dmi_dchng * (-dt) * (Tk[i] + dlt_Tk[i])**(-2)
-        
-                    # if drying/wetting model active, jacobian entry w.r.t. equilibrium is nonzero
-                    # it is zero if the 'dead zone' model is active
-                    if model_ids[i] < 4:
-                        J[i, 2*k] = dmi_dequi
-        
+
                 else:
         
                     # rain model active
@@ -165,7 +161,7 @@ class CellMoistureModel:
             self.P += mQ
 
         # update to the new state
-        self.m_ext[:3] = m_new
+        self.m_ext[:k] = m_new
         
         
     def get_state(self):
