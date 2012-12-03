@@ -74,7 +74,7 @@ trS = zeros(N, 1);
 sP = zeros(N, Ndim, Ndim);
 
 % W0 is a UKF parameter affecting the sigma point distribution
-W0 = 0.1;
+W0 = 0.0;
 Ndim = size(m_ext, 1);
 Npts = Ndim * 2 + 1;
 
@@ -157,7 +157,9 @@ for i = 2:N
         
 end
 
-figure;
+set(0,'DefaultAxesLooseInset',[0,0,0,0])
+
+figure('units','normalized','outerposition',[0 0 1 1])
 subplot(311);
 plot(t, m_f(:,1), 'r-', 'linewidth', 2);
 hold on;
@@ -165,9 +167,10 @@ plot(t, m_n(:,1), 'g-', 'linewidth', 2);
 plot(t, r, 'k--', 'linewidth', 2);
 plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'm');
 plot(repmat(t, 1, 2), [m_f(:,1) - sqrt(sP(:, 1, 1)), m_f(:,1) + sqrt(sP(:, 1, 1))], 'rx');
-h = legend('system + UKF', 'raw system', 'rainfall [mm/h]', 'observations', 'orientation', 'horizontal');
-set(h, 'fontsize', 14);
-title('Plot of the evolution of the moisture model [UKF]', 'fontsize', 16);
+h = legend('sys + UKF', 'raw', 'orientation', 'horizontal');
+set(h, 'fontsize', 10);
+title('Plot of the evolution of the moisture model [UKF]', 'fontsize', 12);
+ylim([-0.5, 1.2]);
 
 % select time indices corresponding to observation times
 [I,J] = ind2sub([N_obs, N], find(repmat(t', N_obs, 1) == repmat(obs_time, 1, N)));
@@ -177,9 +180,10 @@ hold on;
 plot(obs_time, log10(trS(J)), 'ko', 'markerfacecolor', 'green', 'markersize', 6);
 plot(obs_time, log10(trK(J)), 'ko', 'markerfacecolor', 'red', 'markersize', 6);
 hold off;
-h = legend('State', 'Innovation', 'Kalman gain', 'orientation', 'horizontal');
-set(h, 'fontsize', 14);
-title('Kalman filter: log(generalized variance) of covar/Kalman matrices vs. time [UKF]', 'fontsize', 16);
+h = legend('state', 'innov.', 'K', 'orientation', 'horizontal');
+set(h, 'fontsize', 10);
+title('Kalman filter: log(generalized variance) of covar/Kalman matrices vs. time [UKF]', 'fontsize', 12);
+ylim([-12, 5]);
 
 subplot(313);
 plot(t, sP(:, 1, 1), 'r-', 'linewidth', 2);
@@ -192,37 +196,30 @@ plot(t, sP(:, 2, 2), 'g--', 'linewidth', 2);
 plot(t, sP(:, 3, 3), 'b--', 'linewidth', 2);
 hold off
 h = legend('var(m)', 'cov(m,dT)', 'cov(m,dE)', 'cov(m,dS)', 'cov(m,dTr)', 'orientation', 'horizontal');
-set(h, 'fontsize', 14);
-title('Covariance between moisture and system parameters [UKF]', 'fontsize', 16);
+set(h, 'fontsize', 8);
+title('Covariance between moisture and system parameters [UKF]', 'fontsize', 12);
+ylim([-0.005, 0.07]);
 
 print(gcf, '-depsc', 'ukf_assim_ts.eps');
 
-
-figure;
+figure('units','normalized','outerposition',[0 0 1 1])
 subplot(311);
 plot(repmat(t, 1, 2), m_f(:,[2, 5]), 'linewidth', 2);
-title('Time constant changes [UKF]', 'fontsize', 16);
+title('Time constant changes [UKF]', 'fontsize', 12);
 h = legend('dTk1', 'dTrk');
-set(h, 'fontsize', 14);
+set(h, 'fontsize', 10);
+ylim([-0.5, 2.5] * 1e-7);
+
 subplot(312);
 plot(repmat(t, 1, 2), m_f(:, [3, 4]), 'linewidth', 2);
 h = legend('dE', 'dS');
-set(h, 'fontsize', 14);
-title('Equilibrium changes [UKF]', 'fontsize', 16);
+set(h, 'fontsize', 10);
+title('Equilibrium changes [UKF]', 'fontsize', 12);
+ylim([-15, 5] * 1e-3);
+
 subplot(313);
-plot(t, model_ids, 'or');
-title('Active submodel of the moisture model [UKF]', 'fontsize', 16);
+plot(t, model_ids, 'or', 'markerfacecolor', 'red');
+title('Active submodel of the moisture model [UKF]', 'fontsize', 12);
+ylim([-1, 5]);
 
 print(gcf, '-depsc', 'ukf_assim_params.eps');
-
-% figure;
-% rng = 20:80;
-% plot(t(rng), m_n(rng,1), 'k-', 'linewidth', 2);
-% hold on
-% plot(t(rng), m_f(rng,1), 'r-', 'linewidth', 2);
-% plot(repmat(t(rng), 1, 2), squeeze(sigma_pts(rng, 1, [1,6])), 'x');
-% hold off
-% title('Plot of the 1st (fast) fuel with sigma point projections');
-% h = legend('Model', 'Model+UKF', '$$\Sigma$$-high', '$$\Sigma$$-low');
-% set(h, 'interpreter', 'latex');
-

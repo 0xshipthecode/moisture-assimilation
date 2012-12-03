@@ -106,7 +106,6 @@ for i=2:N
 
         % innovation covariance (H=I due to direct observation)
         S = H*P*H' + R;
-%        trS(i) = trace(S);
         trS(i) = prod(eig(S));
         
         % Kalman gain is inv(S) * P for this case (direct observation)
@@ -130,7 +129,9 @@ for i=2:N
         
 end
 
-figure;
+set(0,'DefaultAxesLooseInset',[0 0 0 0])
+
+figure('units','normalized','outerposition',[0 0 1 1]);
 subplot(311);
 plot(t, m_f(:,1), 'r-', 'linewidth', 2);
 hold on;
@@ -138,9 +139,10 @@ plot(t, m_n(:,1), 'g-', 'linewidth', 2);
 plot(t, r, 'k--', 'linewidth', 2);
 plot(obs_time, obs_moisture(:,1), 'ko', 'markersize', 8, 'markerfacecolor', 'm');
 plot(repmat(t, 1, 2), [m_f(:,1) - sqrt(sP(:, 1, 1)), m_f(:,1) + sqrt(sP(:, 1, 1))], 'rx');
-h = legend('system + EKF', 'raw system', 'rainfall [mm/h]', 'observations', 'orientation', 'horizontal');
-set(h, 'fontsize', 14);
-title('Plot of the evolution of the moisture model [EKF]', 'fontsize', 16);
+h = legend('sys + EKF', 'raw', 'orientation', 'horizontal');
+set(h, 'fontsize', 10);
+title('Plot of the evolution of the moisture model [EKF]', 'fontsize', 12);
+ylim([-0.5, 1.2]);
 
 % select time indices corresponding to observation times
 [I,J] = ind2sub([N_obs, N], find(repmat(t', N_obs, 1) == repmat(obs_time, 1, N)));
@@ -154,8 +156,9 @@ hold off;
 a = axis();
 axis([a(1) a(2) a(3) max(a(4), 1.0)]);
 h = legend('State', 'Jacobian', 'Innovation', 'Kalman gain', 'orientation', 'horizontal');
-set(h, 'fontsize', 14);
-title('Kalman filter: log(generalized variance) of covar/Kalman matrices vs. time [EKF]', 'fontsize', 16);
+set(h, 'fontsize', 10);
+title('Kalman filter: log(generalized variance) of covar/Kalman matrices vs. time [EKF]', 'fontsize', 12);
+ylim([-12, 5]);
 
 subplot(313);
 plot(t, sP(:, 1, 1), 'r-', 'linewidth', 2);
@@ -168,18 +171,30 @@ plot(t, sP(:, 2, 2), 'g--', 'linewidth', 2);
 plot(t, sP(:, 3, 3), 'b--', 'linewidth', 2);
 hold off
 h = legend('var(m)', 'cov(m,dT)', 'cov(m,dE)', 'cov(m,dS)', 'cov(m,dTr)', 'orientation', 'horizontal');
-set(h, 'fontsize', 14);
-title('Covariance between moisture and system parameters [EKF]', 'fontsize', 16);
+set(h, 'fontsize', 8);
+title('Covariance between moisture and system parameters [EKF]', 'fontsize', 12);
+ylim([-0.005, 0.07]);
 
-figure;
+print(gcf, '-depsc', 'ekf_assim_ts.eps');
+
+figure('units','normalized','outerposition',[0 0 1 1])
 subplot(311);
-plot(repmat(t, 1, 2), m_f(:,[2,5]), 'linewidth', 2);
-title('Time constant changes', 'fontsize', 16);
-legend('dTk1', 'dTrk');
+plot(repmat(t, 1, 2), m_f(:,[2, 5]), 'linewidth', 2);
+title('Time constant changes [EKF]', 'fontsize', 12);
+h = legend('dTk1', 'dTrk');
+set(h, 'fontsize', 10);
+ylim([-0.5, 2.5] * 1e-7);
+
 subplot(312);
-plot(repmat(t, 1, 2), m_f(:, [3,4]), 'linewidth', 2);
-legend('dE', 'dS');
-title('Equilibrium changes', 'fontsize', 16);
+plot(repmat(t, 1, 2), m_f(:, [3, 4]), 'linewidth', 2);
+h = legend('dE', 'dS');
+set(h, 'fontsize', 10);
+title('Equilibrium changes [EKF]', 'fontsize', 12);
+ylim([-15, 5] * 1e-3);
+
 subplot(313);
-plot(t, model_ids, 'or');
-title('Active submodel of the moisture model [EKF]', 'fontsize', 16);
+plot(t, model_ids, 'or', 'markerfacecolor', 'red');
+title('Active submodel of the moisture model [EKF]', 'fontsize', 12);
+ylim([-1, 5]);
+
+print(gcf, '-depsc', 'ekf_assim_params.eps');
