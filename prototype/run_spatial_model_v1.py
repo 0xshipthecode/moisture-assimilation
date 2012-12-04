@@ -8,7 +8,8 @@ Created on Sun Oct 28 18:14:36 2012
 from spatial_model_utilities import render_spatial_field_fast, great_circle_distance
 from time_series_utilities import build_observation_data
 
-from kriging_methods import simple_kriging_data_to_model
+from kriging_methods import simple_kriging_data_to_model, universal_kriging_data_to_model
+
 from wrf_model_data import WRFModelData
 #from cell_model import CellMoistureModel
 from cell_model_opt import CellMoistureModel
@@ -84,7 +85,7 @@ def run_module():
     tz = pytz.timezone('US/Pacific')
     stations = [Station(os.path.join(station_data_dir, s), tz, wrf_data) for s in station_list]
     for s in stations:
-        s.set_measurement_variance('fm10', 0.1)
+        s.set_measurement_variance('fm10', 0.05)
     
     # build the observation data structure indexed by time
     obs_data_fm10 = build_observation_data(stations, 'fm10', wrf_data)
@@ -93,8 +94,8 @@ def run_module():
     E = 0.5 * (Ed[1,:,:] + Ew[1,:,:])
     
     # set up parameters
-    Q = np.eye(9) * 0.0001
-    P0 = np.eye(9) * 0.001
+    Q = np.eye(9) * 0.001
+    P0 = np.eye(9) * 0.01
     dt = 10.0 * 60
     K = np.zeros_like(E)
     V = np.zeros_like(E)
@@ -108,8 +109,8 @@ def run_module():
     cV12 = np.zeros_like(E)
     
     # moisture state and observation residual variance estimators
-    mod_re = OnlineVarianceEstimator(np.zeros_like(E), np.ones_like(E) * 0.03, 1)
-    obs_re = OnlineVarianceEstimator(np.zeros((len(stations),)), np.ones(len(stations),) * 0.1, 1)
+    mod_re = OnlineVarianceEstimator(np.zeros_like(E), np.ones_like(E) * 0.05, 1)
+    obs_re = OnlineVarianceEstimator(np.zeros((len(stations),)), np.ones(len(stations),) * 0.05, 1)
     
     # initialize the mean field model (default fit is 1.0 of equilibrium before new information comes in)
     mfm = MeanFieldModel(cfg['lock_gamma'])
@@ -180,13 +181,12 @@ def run_module():
                 mresV = mod_re.get_variance()
 
                 # krige data to observations
-                Kf_fn, Vf_fn = simple_kriging_data_to_model(obs_data[model_time], obs_re.get_variance() ** 0.5,
+                Kf_fn, Vf_fn = universal_kriging_data_to_model(obs_data[model_time], obs_re.get_variance() ** 0.5,
                                                             predicted_field, wrf_data, mresV ** 0.5, t)
 
                 krig_vals = np.array([Kf_fn[o.get_nearest_grid_point()] for o in obs_data[model_time]])                
                 diagnostics().push("assim_data", (t, fuel_ndx, obs_vals, ngp_vals, krig_vals, mod_vals, mod_na_vals))
 
-                
                 # append to storage for kriged fields in this time instant
                 Kf.append(Kf_fn)
                 Vf.append(Vf_fn)
@@ -237,9 +237,12 @@ def run_module():
         plt.clim([0.0, 1.0])        
         plt.colorbar()
         plt.subplot(3,3,6)
-        render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain for 1-hr fuel')  
-        plt.clim([0.0, 1.0])        
-        plt.colorbar()
+#        render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain for 1-hr fuel')  
+#        plt.clim([0.0, 1.0])        
+#        plt.colorbar()
+	render_spatial_field_fast(m, lon, lat, Kf_fn, 'Kriging field')
+	plt.clim([0.0, maxE])
+	plt.colorbar()
         plt.subplot(3,3,7)
         render_spatial_field_fast(m, lon, lat, mid, 'Model ids')
         plt.clim([0.0, 5.0])
