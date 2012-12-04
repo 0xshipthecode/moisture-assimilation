@@ -56,7 +56,8 @@ def run_module():
     diagnostics().configure_tag("skdm_cov_cond", False, True, True)
 
     diagnostics().configure_tag("assim_mV", False, False, True)
-    diagnostics().configure_tag("assim_K", False, False, True)
+    diagnostics().configure_tag("assim_K0", False, False, True)
+    diagnostics().configure_tag("assim_K1", False, False, True)
     diagnostics().configure_tag("assim_data", False, False, True)
     diagnostics().configure_tag("assim_mresV", False, False, True)
 
@@ -98,13 +99,13 @@ def run_module():
     K = np.zeros_like(E)
     V = np.zeros_like(E)
     mV = np.zeros_like(E)
-    Kg = np.zeros_like(E)
     predicted_field = np.zeros_like(E)
     mresV = np.zeros_like(E)
     Kf_fn = np.zeros_like(E)
     Vf_fn = np.zeros_like(E)
     mid = np.zeros_like(E)
-    Kg = np.zeros((dom_shape[0], dom_shape[1], 1))
+    Kg = np.zeros((dom_shape[0], dom_shape[1], 9))
+    cV12 = np.zeros_like(E)
     
     # moisture state and observation residual variance estimators
     mod_re = OnlineVarianceEstimator(np.zeros_like(E), np.ones_like(E) * 0.03, 1)
@@ -146,7 +147,9 @@ def run_module():
             f[p[0], p[1], :] = models[p].get_state()[:3]
             f_na[p[0], p[1], :] = models_na[p].get_state()[:3]
             mV[pos] = models[p].get_state_covar()[1,1]
-	    mid[p] = models[p].get_model_ids()[1]
+            cV12[pos] = models[p].get_state_covar()[0,1]
+            mid[p] = models[p].get_model_ids()[1]
+            
 
         # run Kriging on each observed fuel type
         Kf = []
@@ -192,7 +195,6 @@ def run_module():
         # if there were any observations, run the kalman update step
         if len(fn) > 0:
             Nobs = len(fn)
-            Kg = np.zeros((dom_shape[0], dom_shape[1], Nobs))
             # run the kalman update in each model independently
             # gather the standard deviations of the moisture fuel after the Kalman update
             for pos in np.ndindex(dom_shape):
@@ -204,11 +206,9 @@ def run_module():
                     O[i] = Kf[i][pos]
                     V[i,i] = Vf[i][pos]
                 
-                # execute the Kalman update 
-                Kg[pos[0], pos[1], :] = models[pos].kalman_update(O, V, fn)
-                
-            # push the mean Kalman gain
-            diagnostics().push("assim_K", (t, np.mean(Kg[:,:,0])))
+                # execute the Kalman update
+                Kij = models[pos].kalman_update(O, V, fn)
+                Kg[pos[0], pos[1], :] = Kij[:, 0]
             
 
         # prepare visualization data        
@@ -226,28 +226,23 @@ def run_module():
         plt.clim([0.0, maxE])        
         plt.colorbar()
         plt.subplot(3,3,3)
-#        render_spatial_field_fast(m, lon, lat, f[:,:,2], '100-hr fuel')
-	render_spatial_field_fast(m, lon, lat, mid, 'Model ids')
-#        plt.clim([0.0, maxE])        
-	plt.clim([0.0, 5.0])
-        plt.colorbar()
-        plt.subplot(3,3,4)
-        render_spatial_field_fast(m, lon, lat, predicted_field, 'Mean field Fit')
-        plt.clim([0.0, maxE])        
-        plt.colorbar()
-        plt.subplot(3,3,5)
-        render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain for 10-hr fuel')       
-        plt.clim([0.0, 1.0])        
-        plt.colorbar()
-        plt.subplot(3,3,6)
-#        render_spatial_field_fast(m, lon, lat, mV, '10-hr fuel variance')
-#        plt.clim([0.0, np.max(mV)]) 
         render_spatial_field_fast(m, lon, lat, f_na[:,:,1], '10hr fuel - no assim')
         plt.clim([0.0, maxE])
         plt.colorbar()
+        plt.subplot(3,3,4)
+        render_spatial_field_fast(m, lon, lat, cV12, 'State cov. 1hr/10hr fuel')        
+        plt.colorbar()
+        plt.subplot(3,3,5)
+        render_spatial_field_fast(m, lon, lat, Kg[:,:,1], 'Kalman gain for 10-hr fuel')       
+        plt.clim([0.0, 1.0])        
+        plt.colorbar()
+        plt.subplot(3,3,6)
+        render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain for 1-hr fuel')  
+        plt.clim([0.0, 1.0])        
+        plt.colorbar()
         plt.subplot(3,3,7)
-        render_spatial_field_fast(m, lon, lat, Kf_fn, 'Kriged observations')
-        plt.clim([0.0, maxE])
+        render_spatial_field_fast(m, lon, lat, mid, 'Model ids')
+        plt.clim([0.0, 5.0])
         plt.colorbar()
         plt.subplot(3,3,8)
         render_spatial_field_fast(m, lon, lat, Vf_fn, 'Kriging variance')
@@ -261,7 +256,8 @@ def run_module():
         plt.savefig(os.path.join(cfg['output_dir'], 'moisture_model_t%03d.png' % t))
 
         # push new diagnostic outputs
-        diagnostics().push("assim_K", (t, np.mean(Kg[:,:,0])))
+        diagnostics().push("assim_K0", (t, np.mean(Kg[:,:,0])))
+        diagnostics().push("assim_K1", (t, np.mean(Kg[:,:,1])))
         diagnostics().push("assim_mV", (t, np.mean(mV)))
         diagnostics().push("assim_mresV", (t, np.mean(mresV)))
         diagnostics().push("kriging_variance", (t, np.mean(Vf_fn)))
@@ -304,11 +300,17 @@ def run_module():
         plt.savefig(os.path.join(cfg['output_dir'], 'station%02d.png' % (i+1)))
         
     plt.figure()
-    plt.plot([d[0] for d in diagnostics().pull("assim_K")],
-             [d[1] for d in diagnostics().pull("assim_K")], 'ro-')
+    plt.plot([d[0] for d in diagnostics().pull("assim_K1")],
+             [d[1] for d in diagnostics().pull("assim_K1")], 'ro-')
     plt.title('Average Kalman gain')
-    plt.savefig(os.path.join(cfg['output_dir'], 'plot_kalman_gain.png'))
+    plt.savefig(os.path.join(cfg['output_dir'], 'plot_kalman_gain_10hr.png'))
     
+    plt.figure()
+    plt.plot([d[0] for d in diagnostics().pull("assim_K0")],
+             [d[1] for d in diagnostics().pull("assim_K0")], 'ro-')
+    plt.title('Average Kalman gain')
+    plt.savefig(os.path.join(cfg['output_dir'], 'plot_kalman_gain_1hr.png'))
+
     plt.figure()
     plt.plot([d[0] for d in diagnostics().pull("assim_mV")],
              [d[1] for d in diagnostics().pull("assim_mV")], 'ro-')

@@ -91,7 +91,7 @@ if __name__ == '__main__':
         slon, slat = s.get_position()
         x, y = m(slon, slat)
         plt.plot(x, y, 'o', markersize = 8, markerfacecolor = 'magenta')
-        plt.text(x, y, s.get_name())
+        plt.text(x, y, s.get_name(), color = 'white')
 
     x, y = m(lon.ravel(), lat.ravel())
     plt.plot(x, y, 'k+', markersize = 4)

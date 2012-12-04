@@ -203,4 +203,4 @@ class CellMoistureModel:
         self.m_ext += np.dot(K, O - self.m_ext[fuel_types])
         P -= np.dot(np.dot(K, Ho), P) 
 
-        return [ K[fuel_types[i], i] for i in range(len(fuel_types)) ]
+        return K

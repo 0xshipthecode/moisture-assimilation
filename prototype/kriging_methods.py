@@ -24,13 +24,30 @@ def construct_spatial_correlation_matrix(gridndx, mlons, mlats):
     # estimate correlation coeff
     return np.maximum(np.eye(N), 0.8565 - 0.0063 * D)
 
+def construct_spatial_correlation_matrix2(lonlat):
+    """
+    Construct a distance-based correlation matrix between residuals at given longitudes
+    and lattitudes.
+    """
+    N = len(lonlat)
+    C = np.eye(N)
+    
+    # compute distances in km between locations
+    for (lon1,lat1), i1 in zip(lonlat, range(N)):
+        for (lon2,lat2), i2 in zip(lonlat, range(N)):
+            if i1 != i2:
+                C[i1,i2] = max(0.0, 0.8565 - 0.0063 * great_circle_distance(lon1, lat1, lon2, lat2))
+                
+    # estimate correlation coeff
+    return C
+
 
 
 def simple_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_stds, t):
     """
     Simple kriging of data points to model points.  The kriging results in
-    the matrix K, which contains mean of the kriged observations and the
-    matrix V, which contains the kriging variance. 
+    the matrix K, which contains the kriged observations and the matrix V,
+    which contains the kriging variance.
     """
     mlons, mlats = wrf_data.get_lons(), wrf_data.get_lats()
     K = np.zeros_like(mlons)
@@ -55,10 +72,8 @@ def simple_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_stds,
     # compute observation residuals (using model fit from examine_station_data)
     res_obs = obs_vals - mu_obs
     
-    diagnostics().push("skdm_obs_res", res_obs)
-    
     # construct the covariance matrix and invert it
-    C = np.asmatrix(construct_spatial_correlation_matrix(gridndx, mlons, mlats))
+    C = np.asmatrix(construct_spatial_correlation_matrix2(station_lonlat))
     oS = np.asmatrix(np.diag(obs_stds))
     Sigma = oS.T * C * oS + np.diag(measV)
     SigInv = np.linalg.inv(Sigma)
