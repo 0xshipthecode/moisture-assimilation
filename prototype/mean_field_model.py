@@ -13,9 +13,12 @@ class MeanFieldModel:
     def __init__(self, lock_gamma = None):
         self.lock_gamma = lock_gamma != None
         self.gamma = 1.0 if lock_gamma == None else lock_gamma
+        
+        # configure diagnostics
         diagnostics().push("mfm_lock_gamma", lock_gamma)
         diagnostics().configure_tag("mfm_res_avg", True, True, True)
         diagnostics().configure_tag("mfm_gamma", True, True, True)
+        diagnostics().configure_tag("mfm_mape", True, True, True)
     
     
     def fit_to_data(self, E, obs_list):
@@ -34,6 +37,7 @@ class MeanFieldModel:
         gamma = np.sum(weights * modv * obsv) / np.sum(weights * modv ** 2)
         diagnostics().push("mfm_res_avg", np.mean(obsv - gamma * modv))
         diagnostics().push("mfm_gamma", gamma)
+        diagnostics().push("mfm_mape", np.mean(np.abs(obsv - gamma * modv)))
         
         # if the gamma is not locked, then store the new best fit
         if not self.lock_gamma:

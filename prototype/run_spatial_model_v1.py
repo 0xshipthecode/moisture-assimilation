@@ -209,7 +209,7 @@ def run_module():
                 # execute the Kalman update
                 Kij = models[pos].kalman_update(O, V, fn)
                 Kg[pos[0], pos[1], :] = Kij[:, 0]
-            
+
 
         # prepare visualization data        
         f = np.zeros((dom_shape[0], dom_shape[1], 3))
@@ -341,6 +341,11 @@ def run_module():
     plt.title('Observation residual variance')
     plt.savefig(os.path.join(cfg['output_dir'], 'plot_observation_residual_variance.png'))
     
+    plt.figure()
+    plt.plot(diagnostics().pull("mfm_mape"), 'ro-', linewidth = 2)
+    plt.title('Mean absolute prediction error of station data')
+    plt.savefig(os.path.join(cfg['output_dir'], 'plot_station_mape.png'))
+
     diagnostics().dump_store(os.path.join(cfg['output_dir'], 'diagnostics.bin'))
     
     # as a last step encode all the frames as video
