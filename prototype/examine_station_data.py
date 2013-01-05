@@ -3,7 +3,7 @@ from time_series_utilities import match_time_series, build_observation_data
 from spatial_model_utilities import render_spatial_field, great_circle_distance
                                     
 from wrf_model_data import WRFModelData
-from observation_stations import Station, Observation
+from observation_stations import StationAdam, Observation
 from mean_field_model import MeanFieldModel
 from statistics import compute_ols_estimator
 from diagnostics import init_diagnostics, diagnostics

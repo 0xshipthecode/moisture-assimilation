@@ -8,6 +8,7 @@ import re
 import pytz
 import codecs
 from datetime import datetime, timedelta
+import xlrd
 
 
 class Observation:
@@ -71,30 +72,28 @@ class Observation:
 
 class Station:
     """
-    An observation station which yields observations.
+    An observation station which stores and yields observations.
+    All times must be in GMT.
     """
-    
-    def __init__(self, file_name, time_zone, wrf_data):
+    def __init__(self, wrf_data=None):
         """
         Load a station from data file.
         """
-        self.tz = time_zone
-        self.file = file_name
-
-        # array of values
+        # array of observation times and dictionary of obs variables
         self.tm = []
-        self.fm10 = []
-        self.rh = []
-        self.rain = []
-        self.air_temp = []
-        self.fuel_temp = []
+        self.obs_vars = {}
         
-        self.load_station_data(file_name, time_zone)
-        
-        mlon, mlat = wrf_data.get_lons(), wrf_data.get_lats()
-        self.grid_pt = find_closest_grid_point(self.lon, self.lat, mlon, mlat)
-        self.dist_grid_pt =  great_circle_distance(self.lon, self.lat, mlon[self.grid_pt], mlat[self.grid_pt])
-        
+        # only co-register to grid if required
+        if wrf_data is not None:
+            mlon, mlat = wrf_data.get_lons(), wrf_data.get_lats()
+            self.grid_pt = find_closest_grid_point(self.lon, self.lat, mlon, mlat)
+            self.dist_grid_pt =  great_circle_distance(self.lon, self.lat,
+                                                       mlon[self.grid_pt], mlat[self.grid_pt])
+        else:
+            self.grid_pt = None
+            self.dist_grid_pt = None
+    
+        # the measurement variance of different observations is unknown
         self.measurement_variance = {}
         
 
@@ -133,13 +132,6 @@ class Station:
         return self.tm
     
     
-    def get_fuel_moisture(self):
-        """
-        Return the fuel moisture time series.
-        """
-        return self.fuel_moisture
-    
-    
     def get_elevation(self):
         """
         Return the elevation in meters above sea level.
@@ -159,11 +151,56 @@ class Station:
         Set the variance of the measurements from this station.
         """
         self.measurement_variance[field_name] = v
+
+
+     def get_observations_raw(self, obs_name):
+        """
+        Return an entire time series of given observation type.  Returns
+        the raw observation values.  Call must manage time stamps.
+        """
+        return self.obs_vars[obs_name]
+
+
+     def get_observations(self, obs_name):
+        """
+        Returns a list of Observations for given observation type (var name).
+        """
+        obs = self.get_observations_raw(obs_name)
+        mv = self.get_measurement_variance(obs_name)
+        return [Observation(self, self.tm[i], obs[i], mv, obs_type) for i in range(len(obs))]
+
         
+     def get_observations_for_times(self, obs_type, tm):
+        """
+        Get the observations of the field which match the times passed in tm.
+        Also returns an index array which shows which times in the argument tm
+        match the observation times returned.
+        Returns a set of Observations.
+        """
+        _, indx_me, indx_other = match_sample_times(self.tm, tm)
+        ts = self.get_observations_raw(obs_type) 
+        mv = self.get_measurement_variance(obs_type)
+        return indx_other, [Observation(self, self.tm[i], ts[i], mv, obs_type) for i in indx_me]
+
+
+
+class StationAdam(Station):
+    """
+    An specialization of observation station which loads data from
+    the format Adam sent to me for the Witch Creek data.
+    """
+    
+    def __init__(self, wrf_data):
+        """
+        Load a station from data file.
+        """
+        Station.__init__(self, wrf_data)
         
+
     def load_station_data(self, station_file, tz):
         """
-        Load all available fuel moisture data from the station information.
+        Load all available fuel moisture data from the station information text file.
+        These files have been supplied by A. Kochanski.
         """
         f = codecs.open(station_file, 'r', encoding = 'utf-8')
         s = f.readline().strip()
@@ -231,6 +268,80 @@ class Station:
         f.close()
         
         
+class MesoWestStation(Station):
+    """
+    An observation station with data downloaded from the MesoWest website in xls format.
+    """
+    
+    def __init__(self, info_string, wrf_data = None):
+        """
+        Initialize the station using an info_string that is written by the scrape_stations.py
+        script into the 'station_infos' file.
+        """
+        Station.__init__(self, wrf_data)
+
+        # initialize a flag that will be set to False if any data is missing or invalid
+        # when loading
+        self.data_loaded_ok = True
+        
+        
+    def load_station_data(self, station_file):
+        """
+        Load all available fuel moisture data from the station measurement file
+        in xls format.
+        """
+        # load the worksheet
+        x = xlrd.open_workbook(station_file)
+        s = x.sheet_by_index(0)
+
+        # find the order of the variables
+        var_ord = []
+        cell_ord = []
+        for i in range(1,5):
+            cv = s.cell_value(0,i)
+            if 'TMP' in cv:
+                var_ord.append(self.air_temp)
+                cell_ord.append(i)
+            elif 'RELH' in cv:
+                var_ord.append(self.rh)
+                cell_ord.append(i)
+            elif 'FM' in cv:
+                var_ord.append(self.fm10)
+                cell_ord.append(i)
+
+        if len(var_ord) != 3:
+            self.data_loaded_ok = False
+
+        # now read 24 entries starting at 
+        i = 1
+        while True:
+            # parse the time stamp string
+            try:
+                self.tm.append(datetime.strptime(s.cell_value(i,0), '%m-%d-%Y %H:%M %Z'))
+            except ValueError:
+                break
+
+            # parse the variables in order
+            for j in range(len(cell_ord)):
+                try:
+                    var_ord[j].append(float(s.cell_value(i,cell_ord[j])))
+                except ValueError:
+                    var_ord[j].append(float('nan'))
+                    self.data_loaded_ok = False
+
+            i += 1
+
+        if i != 25:
+            self.data_loaded_ok = False
+
+
+    def data_ok(self):
+        """
+        Check if data loaded without any errors.
+        """
+        return self.data_loaded_ok
+
+
     def get_observations_for_times(self, obs_type, tm):
         """
         Get the observations of the field which match the times passed in tm.
@@ -239,3 +350,16 @@ class Station:
         ts = vars(self)[obs_type]
         mv = self.get_measurement_variance(obs_type)
         return indx_other, [Observation(self, self.tm[i], ts[i], mv, obs_type) for i in indx_me]
+
+    def get_observations(self, obs_type):
+        """
+        Return an entire time series of given observation type.
+        """
+        return vars(self)[obs_type]
+
+
+if __name__ == '__main__':
+
+    o = MesoWestStation('../real_data/colorado_stations/BAWC2.xls', 'BAWC2,39.3794,-105.3383,2432.9136') 
+    print(o.get_observations('fm10'))
+

@@ -4,10 +4,15 @@ import urllib
 import time
 import argparse
 from datetime import datetime
+import string
+
 
 # mesowest list of stations
-mesowest_dl_url = 'http://mesowest.utah.edu/cgi-bin/droman/download_ndb.cgi?stn=%s'
+mesowest_station_url = 'http://mesowest.utah.edu/cgi-bin/droman/download_ndb.cgi?stn=%s'
 mesowest_net_url = 'http://mesowest.utah.edu/cgi-bin/droman/stn_mnet.cgi?mnet=%d'
+mesowest_dl_url = 'http://mesowest.utah.edu/cgi-bin/droman/meso_download_mesowest_ndb.cgi'
+mesowest_station_pos = 'http://mesowest.utah.edu/cgi-bin/droman/side_mesowest.cgi?stn=%s'
+
 
 def retrieve_web_page(addr):
     """
@@ -17,6 +22,7 @@ def retrieve_web_page(addr):
     content = f.read()
     f.close()
     return content
+
 
 def extract_stations(table):
     """
@@ -46,19 +52,30 @@ def extract_stations(table):
     return stations
 
 
-def get_station_variables(station_info):
+def get_station_info(station_info):
     """
     Return a list all the variables that are measured by a station with the station
     code given, store it in the station_info dictionary and also return it.
     """
     # retrieve web page, parse it and pause slightly
-    p = retrieve_web_page(mesowest_dl_url % station_info['code'])
-    soup2 = BeautifulSoup(p)
-    table = soup2.find_all('table')[-2]
+    p = retrieve_web_page(mesowest_station_url % station_info['code'])
+    soup = BeautifulSoup(p)
+    table = soup.find_all('table')[-2]
     varc = table.find_all('td')[2]
     vlist = [ inp.get('value') for inp in varc.find_all('input') ]
     station_info['vlist'] = vlist
-    return vlist
+
+    # retrieve web page with position info for station
+    p = retrieve_web_page(mesowest_station_pos % station_info['code'])
+    soup = BeautifulSoup(p)
+    data = filter(lambda x: x.find(':') > 0, map(string.strip, soup.div.getText().split('\n')))
+    pairs = [ s.split(':') for s in data ]
+    d = { p[0] : p[1] for p in pairs }
+    station_info['elevation'] = int(d['ELEVATION'][:-3]) * 0.3048
+    station_info['lat'] = float(d['LATITUDE'])
+    station_info['lon'] = float(d['LONGITUDE'])
+    station_info['wims'] = d['WIMS ID']
+    station_info['mnet'] = d['MNET']
 	   
 
 def observes_variables(station_info, req_vars):
@@ -69,7 +86,7 @@ def observes_variables(station_info, req_vars):
     if station_info.has_key('vlist'):
         vlist = station_info['vlist']
     else:
-        vlist = get_station_variables(station_info)
+        vlist = get_station_info(station_info)
         print('# vars for %s : %s' % (station_info['code'], str(station_info['vlist'])))
         time.sleep(0.1)
 
@@ -109,33 +126,83 @@ def find_and_list_stations(args):
     return stations
 
 
+def download_station_data(station_info, out_fmt, tstmp, length_hrs, vlist = None):
+    """
+    Downloads station observations for the given station and parameters.
+    """
+    output_map = { 'xls' : 'Excel', 'csv' : 'csv', 'xml' : 'xml' }
+    
+    params = [ ['product', ''],                 # empty in the form on the website
+               ['stn', station_info['code']],   # the station code
+               ['unit', '1'],                   # metric units
+               ['time', 'GMT'],                 # tstamp will be in GMT
+               ['day1', tstmp.day],             # the end timestamp of the measurements
+               ['month1', '%02d' % tstmp.month],
+               ['year1', tstmp.year],
+               ['hour1', tstmp.hour],
+               ['hours', length_hrs],
+               ['daycalendar', 1],
+               ['output', output_map[out_fmt]], # output format (excel/csv/xml)
+               ['order', '0']                   # order is always ascending
+               ]
+
+    # append all variables
+    var_list = vlist if vlist is not None else station_info['vlist']
+    if not observes_variables(station_info, var_list):
+        return None
+
+    for v in var_list: 
+        params.append([v, v])
+
+    # join al internal parameters
+    get_rq = mesowest_dl_url + '?' + string.join(map(lambda x: x[0] + '=' + str(x[1]), params), '&')
+
+    # download the observed variables
+    content = retrieve_web_page(get_rq)
+    return content 
+
+
+def parse_dt(dt):
+    tstmp = datetime.strptime(dt, '%Y/%m/%d.%H:%M')
+    return tstmp
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Downloads and processes fuel moisture data from the MesoWest website.')
-    parser.add_argument('command', type=str, help='the command to execute, one of [list|vars|dl]')
-    parser.add_argument('--network', metavar='N', type=str, dest='network', help='the name of the station network to query (one of RAWS, NWS), list command only')
-    parser.add_argument('--code', metavar='D', type=str, dest='station_code', help='the code of the station to process, dl/vars command only')
-    parser.add_argument('--state', metavar='S', type=str, dest='state', help='only return stations from a particular state (use state code), list command only')
-    parser.add_argument('--vlist', metavar='V', type=str, dest='vlist', help='download the var(s) from a station if command is dl or list stations which provide var(s) in list command, separate stations by a comma, no spaces')
-    parser.add_argument('--from', metavar='F', type=datetime, dest='from_date', help='starting date/time for the downloaded range, dl only')
-    parser.add_argument('--to', metavar='T', type=datetime, dest='to_date', help='end date/time for the downloaded range, dl only')
+    parser.add_argument('command', type=str, help='the command to execute, one of [list|info|dl]')
+    parser.add_argument('-n', '--network', metavar='N', type=str, dest='network', help='the name of the station network to query (one of RAWS, NWS), list command only')
+    parser.add_argument('-c', '--code', metavar='D', type=str, dest='station_code', help='the code of the station to process, dl/vars command only')
+    parser.add_argument('-s', '--state', metavar='S', type=str, dest='state', help='only return stations from a particular state (use state code), list command only')
+    parser.add_argument('-v', '--vlist', metavar='V', type=str, dest='vlist', default=None, help='(dl/list) download the var(s) from a station if command is dl or list stations which provide var(s) if list; separate variables by a comma, no spaces')
+    parser.add_argument('-i', '--interval', metavar='H', type=int, dest='hours', help='the timespan for which to download measurements (number of hours, dl only)')
+    parser.add_argument('-t', '--tstamp', metavar='T', type=parse_dt, dest='tstamp', help='end date/time for the downloaded range, dl only')
+    parser.add_argument('-f', '--fmt', metavar='M', type=str, default='xls', dest='fmt', help='(dl only) download in what format? (xls/csv/xml)')
+    parser.add_argument('-l', '--line', action='store_const', const='terse', default='loose', dest='info_fmt', help='(info only) print information in terse format')
+    
     args = parser.parse_args()
 
     if args.vlist is not None:
         args.vlist = args.vlist.split(',')
-        print args.vlist
 
     if args.command == 'list':
         stations = find_and_list_stations(args)
         map(lambda x: sys.stdout.write(x['code'] + '\n'), stations)
-    elif args.command == 'vars':
-        vlist = list_station_variables(args)
-        map(lambda x: sys.stdout.write(x + '\n'), vlist)
+
+    elif args.command == 'info':
+        si = { 'code' : args.station_code }
+        get_station_info(si)
+        if args.info_fmt == 'loose':
+            for k,v in si.iteritems():
+                print(k + '=' + str(v))
+        else:
+            print(si['code'] + ',' + str(si['lat']) + ',' + str(si['lon']) + ',' + str(si['elevation']))
+
     elif args.command == 'dl':
-        doc = download_station_vars(args)
-        with open('%s.xls' % args.code, 'w') as f:
+        station_info = { 'code' : args.station_code }
+        get_station_info(station_info)
+        doc = download_station_data(station_info, args.fmt, args.tstamp, args.hours, args.vlist)
+        with open('%s.%s' % (args.station_code, args.fmt), 'w') as f:
             f.write(doc)
     else:
         sys.exit(1)
         
-	

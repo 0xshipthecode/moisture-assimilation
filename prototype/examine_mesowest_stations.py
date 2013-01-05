@@ -1,4 +1,13 @@
-
+#
+#
+#  This script attempted to find a nice spatial correlation structure in the observation
+#  of fuel moisture (fm vs. equilibrium residualds) using moisture equilibria computed
+#  from relative humidity and temperature measured directly at the site of the station.
+#  However, comparisons show that the fuel moisture from the sensor is very different
+#  from the computed equilibrium.  This indicates the residuals are unusable and indeed
+#  there is a very weak spatial structure.
+#
+#
 from time_series_utilities import match_time_series, build_observation_data
 from spatial_model_utilities import render_spatial_field, great_circle_distance
                                     
@@ -33,26 +42,6 @@ def compute_model_equi_fm(station):
     Ew *= 0.01
 
     return 0.5 * (Ed + Ew)
-
-
-def plot_stations_vs_model_ts(stations, field_name):
-    
-    # extract station time series and corresponding grid point time series
-    f = plt.figure()
-    f.subplots_adjust(hspace = 1.2)
-    sp = 1
-    for s in stations:
-        mindx, obs_list = s.get_observations_for_times(field_name, model_tm)
-        obs_ts = [obs.get_value() for obs in obs_list]
-        common_tm = [model_tm[t] for t in mindx]
-        ax = plt.subplot(4, 2, sp)
-        ax.xaxis.set_major_formatter(DateFormatter('%H:%m')) 
-        plt.plot(common_tm, obs_ts, 'ro', common_tm, field[:, i, j], 'gx-', linewidth = 2)
-        plt.title('%s vs. model %s' % (s.get_name(), field_name))
-        for l in ax.get_xticklabels():
-            l.set_rotation(90)
-        sp += 1
-
 
 
 if __name__ == '__main__':
