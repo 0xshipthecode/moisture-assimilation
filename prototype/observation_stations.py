@@ -153,7 +153,7 @@ class Station:
         self.measurement_variance[field_name] = v
 
 
-     def get_observations_raw(self, obs_name):
+    def get_observations_raw(self, obs_name):
         """
         Return an entire time series of given observation type.  Returns
         the raw observation values.  Call must manage time stamps.
@@ -161,7 +161,7 @@ class Station:
         return self.obs_vars[obs_name]
 
 
-     def get_observations(self, obs_name):
+    def get_observations(self, obs_name):
         """
         Returns a list of Observations for given observation type (var name).
         """
@@ -170,17 +170,19 @@ class Station:
         return [Observation(self, self.tm[i], obs[i], mv, obs_type) for i in range(len(obs))]
 
         
-     def get_observations_for_times(self, obs_type, tm):
+    def get_observations_for_times(self, obs_type, tm):
         """
         Get the observations of the field which match the times passed in tm.
         Also returns an index array which shows which times in the argument tm
         match the observation times returned.
         Returns a set of Observations.
         """
-        _, indx_me, indx_other = match_sample_times(self.tm, tm)
+        _, indx_me, _ = match_sample_times(self.tm, tm)
+        if len(indx_me) < len(tm):
+            raise ValueError('Observations for some times not available.')
         ts = self.get_observations_raw(obs_type) 
         mv = self.get_measurement_variance(obs_type)
-        return indx_other, [Observation(self, self.tm[i], ts[i], mv, obs_type) for i in indx_me]
+        return [Observation(self, self.tm[i], ts[i], mv, obs_type) for i in indx_me]
 
 
 
@@ -278,13 +280,25 @@ class MesoWestStation(Station):
         Initialize the station using an info_string that is written by the scrape_stations.py
         script into the 'station_infos' file.
         """
-        Station.__init__(self, wrf_data)
-
         # initialize a flag that will be set to False if any data is missing or invalid
         # when loading
         self.data_loaded_ok = True
+
+        # parse the info_string
+        tokens = info_string.split(',')
+        self.name = tokens[0]
+        self.lat = float(tokens[1])
+        self.lon = float(tokens[2])
+        self.elevation = float(tokens[3]) * 0.3048
+
+        Station.__init__(self, wrf_data)
         
-        
+        # construct empty variable lists for what we wish to load
+        self.obs_vars['air_temp'] = []
+        self.obs_vars['rh'] = []
+        self.obs_vars['fm10'] = []
+
+
     def load_station_data(self, station_file):
         """
         Load all available fuel moisture data from the station measurement file
@@ -300,13 +314,13 @@ class MesoWestStation(Station):
         for i in range(1,5):
             cv = s.cell_value(0,i)
             if 'TMP' in cv:
-                var_ord.append(self.air_temp)
+                var_ord.append(self.obs_vars['air_temp'])
                 cell_ord.append(i)
             elif 'RELH' in cv:
-                var_ord.append(self.rh)
+                var_ord.append(self.obs_vars['rh'])
                 cell_ord.append(i)
             elif 'FM' in cv:
-                var_ord.append(self.fm10)
+                var_ord.append(self.obs_vars['fm10'])
                 cell_ord.append(i)
 
         if len(var_ord) != 3:
@@ -314,10 +328,12 @@ class MesoWestStation(Station):
 
         # now read 24 entries starting at 
         i = 1
+        gmt_tz = pytz.timezone('GMT')
         while True:
             # parse the time stamp string
             try:
-                self.tm.append(datetime.strptime(s.cell_value(i,0), '%m-%d-%Y %H:%M %Z'))
+                tstamp = gmt_tz.localize(datetime.strptime(s.cell_value(i,0), '%m-%d-%Y %H:%M %Z'))
+                self.tm.append(tstamp.replace(minute=0)) 
             except ValueError:
                 break
 
@@ -340,22 +356,6 @@ class MesoWestStation(Station):
         Check if data loaded without any errors.
         """
         return self.data_loaded_ok
-
-
-    def get_observations_for_times(self, obs_type, tm):
-        """
-        Get the observations of the field which match the times passed in tm.
-        """
-        _, indx_me, indx_other = match_sample_times(self.tm, tm)
-        ts = vars(self)[obs_type]
-        mv = self.get_measurement_variance(obs_type)
-        return indx_other, [Observation(self, self.tm[i], ts[i], mv, obs_type) for i in indx_me]
-
-    def get_observations(self, obs_type):
-        """
-        Return an entire time series of given observation type.
-        """
-        return vars(self)[obs_type]
 
 
 if __name__ == '__main__':
