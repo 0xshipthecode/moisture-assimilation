@@ -64,6 +64,7 @@ if __name__ == '__main__':
                             tz_name = 'GMT')
     lon, lat, tm = wrf_data.get_lons(), wrf_data.get_lats(), wrf_data.get_times()
     efms, wrf_equi = wrf_data['EFMS'], wrf_data['FMC_EQUI']
+    T2 = wrf_data['T2']
 
     print('Loaded %d times from WRF output (%s - %s).' % (len(tm), str(tm[0]), str(tm[-1])))
 
@@ -157,7 +158,11 @@ if __name__ == '__main__':
  
     # for each station, plot the equilibrium vs fm10 and accumulate residuals
     residuals = {}
-    for s in stations:
+    fm10_all = np.zeros((len(mtm), len(stations)))
+    T_all = np.zeros_like(fm10_all)
+    wfm10 = np.zeros_like(fm10_all)
+    wT = np.zeros_like(fm10_all)
+    for s, sndx in zip(stations, range(len(stations))):
         
         # compute equilibrium for station data
         H = np.array([o.get_value() for o in s.get_observations_for_times('rh', mtm)])
@@ -167,10 +172,15 @@ if __name__ == '__main__':
         # obtain fm10 station measurements 
         fm10so = [o.get_value() for o in s.get_observations_for_times('fm10', mtm)]
         fm10s = np.array(fm10so)
+        Tso = [o.get_value() for o in s.get_observations_for_times('air_temp', mtm)]
+        fm10_all[:, sndx] = fm10s
+        T_all[:, sndx] = Tso 
 
         # obtain equilibrium at nearest grid point
         i, j = s.get_nearest_grid_point()
         fm10w = np.array(efms[wrf_tndx, 1, i, j])
+        wfm10[:, sndx] = fm10w
+        wT[:, sndx] = np.array(T2[wrf_tndx, i, j])
         equiw = np.array(wrf_equi[wrf_tndx, 1, i, j])
         equiw[equiw > 1.0] = 0.0
         plt.figure()
@@ -191,14 +201,18 @@ if __name__ == '__main__':
     ss = [s.get_name() for s in stations]
     C = np.zeros((Ns,Ns))
     D = np.zeros((Ns,Ns))
+    WD = np.zeros((Ns,Ns))
     E = np.zeros((Ns,Ns))
     for i in range(Ns):
         r1, (lon1, lat1) = residuals[ss[i]], stations[i].get_position()
+        i1,j1 = stations[i].get_nearest_grid_point()
         for j in range(Ns):
             r2, (lon2, lat2) = residuals[ss[j]], stations[j].get_position()
+            i2,j2 = stations[j].get_nearest_grid_point()
             cc = np.cov(r1, r2)
             C[i,j] = cc[0, 1]
             D[i,j] = great_circle_distance(lon1, lat2, lon2, lat2)
+            WD[i,j] = great_circle_distance(lon[i1,j1], lat[i1,j1], lon[i2,j2], lat[i2,j2])
             E[i,j] = np.abs(stations[i].get_elevation() - stations[j].get_elevation()) / 1000.0
 
     f = plt.figure(figsize = (16,16))
@@ -240,10 +254,49 @@ if __name__ == '__main__':
     plt.title('Aggregate plot of covar vs. distance')
     plt.savefig('results/station_residuals_covariance.png')
 
-#    f = open('distance_vs_covariance.txt', 'w')
-#    for i in range(Dt.shape[0]):
-#        f.write('%g,%g\n' % (Dt[i], Ct[i]))
-#    f.close()
+    with open('results/distance_matrix.txt', 'w') as f:
+        for i in range(D.shape[0]):
+            f.write(', '.join(map(str, D[i,:])))
+            f.write('\n')
+        f.close()
+
+    with open('results/wdistance_matrix.txt', 'w') as f:
+        for i in range(WD.shape[0]):
+            f.write(', '.join(map(str, WD[i,:])))
+            f.write('\n')
+        f.close()
+
+    with open('results/fm10_data.txt', 'w') as f:
+        for i in range(len(mtm)):
+            f.write(', '.join(map(str, fm10_all[i,:])))
+            f.write('\n')
+        f.close()
+    
+    with open('results/T_data.txt', 'w') as f:
+        for i in range(len(mtm)):
+            f.write(', '.join(map(str, T_all[i,:])))
+            f.write('\n')
+        f.close()
+
+    with open('results/wfm10_data.txt', 'w') as f:
+        for i in range(len(mtm)):
+            f.write(','.join(map(str, wfm10[i,:])))
+            f.write('\n')
+        f.close()
+
+    with open('results/wT_data.txt', 'w') as f:
+        for i in range(len(mtm)):
+            f.write(', '.join(map(str, wT[i,:])))
+            f.write('\n')
+        f.close()
+
+    with open('results/elevations.txt', 'w') as f:
+        for i in range(len(E)):
+            f.write(', '.join(map(str, E[i,:])))
+            f.write('\n')
+        f.close()
+
+            
 
     # plot the covariance vs. distance from the viewpoint of each station
     for i in range(len(stations)):
