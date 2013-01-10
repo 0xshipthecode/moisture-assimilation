@@ -113,7 +113,7 @@ if __name__ == '__main__':
                 i, j = obs.get_nearest_grid_point()
                 sn = obs.get_station().get_name()
                 rs = residuals[sn] if sn in residuals else []
-                rs.append(obs.get_value() - E[t, i, j])
+                rs.append(obs.get_value() - gammas[-1] * E[t, i, j])
                 residuals[sn] = rs
     
     gammas = np.array(gammas)

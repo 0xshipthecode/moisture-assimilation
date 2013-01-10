@@ -106,7 +106,6 @@ if __name__ == '__main__':
                 urcrnrlat=urcrnrlat,
                 projection = 'mill')
 
-
     # show the equilibrium field and render position of stations on top
     render_spatial_field(m, lon, lat, E[0,:,:], 'Equilibrium moisture')
     plt.figure()
@@ -120,14 +119,46 @@ if __name__ == '__main__':
 
     x, y = m(lon.ravel(), lat.ravel())
     plt.plot(x, y, 'k+', markersize = 4)
+    plt.savefig('results/station_localization.png')
 
+    # find common observation times for the station and for the WRF model
+    tms = stations[0].get_obs_times()
+    mtm, wrf_tndx, _ = match_sample_times(tm, tms)
+
+    # part C - fit the mean field model
+    obs_data = build_observation_data(stations, 'fm10', wrf_data, mtm)
+    Nt = len(obs_data)
+    gammas = []
+    residuals = {}
+    ot = []
+    for t in range(Nt):
+        if tm[t] in obs_data:
+            ot.append(t)
+            obs_at_t = np.array(obs_data[tm[t]])
+            mfm.fit_to_data(E[t, :, :], obs_at_t)
+            gammas.append(mfm.gamma)
+            mu = mfm.predict_field(E[t,:,:])
+            
+            for obs in obs_at_t:
+                i, j = obs.get_nearest_grid_point()
+                sn = obs.get_station().get_name()
+                rs = residuals[sn] if sn in residuals else []
+                rs.append(obs.get_value() - E[t, i, j] * gammas[-1])
+                residuals[sn] = rs
+    
+    gammas = np.array(gammas)
+    ot = np.array(ot)
+
+    # plot the fitteg gammas
+    plt.figure()
+    plt.plot(gammas)
+    plt.title('MFM/Gamma values vs observation time')
+    plt.savefig('results/mfm_gammas.png')
+ 
     # for each station, plot the equilibrium vs fm10 and accumulate residuals
     residuals = {}
     for s in stations:
-        # find common observation times for the station and for the WRF model
-        tms = s.get_obs_times()
-        mtm, wrf_tndx, _ = match_sample_times(tm, tms)
-
+        
         # compute equilibrium for station data
         H = np.array([o.get_value() for o in s.get_observations_for_times('rh', mtm)])
         T = np.array([o.get_value() for o in s.get_observations_for_times('air_temp', mtm)]) + 273.15
@@ -135,7 +166,7 @@ if __name__ == '__main__':
 
         # obtain fm10 station measurements 
         fm10so = [o.get_value() for o in s.get_observations_for_times('fm10', mtm)]
-        fm10s = np.array(fm10so) / 100.0
+        fm10s = np.array(fm10so)
 
         # obtain equilibrium at nearest grid point
         i, j = s.get_nearest_grid_point()
@@ -143,7 +174,7 @@ if __name__ == '__main__':
         equiw = np.array(wrf_equi[wrf_tndx, 1, i, j])
         equiw[equiw > 1.0] = 0.0
         plt.figure()
-        plt.plot(mtm, equis, 'ro', mtm, fm10s, 'rx-', mtm, equiw, 'go',mtm, fm10w, 'gx-')
+        plt.plot(mtm, equis, 'r+-', mtm, fm10s, 'rx-', mtm, equiw, 'g+-',mtm, fm10w, 'gx-')
         plt.title('fm10 and equi in WRF and in station %s' % s.get_name())
         plt.legend(['st. equi', 'st. fm10', 'WRF equi', 'WRF fm10'])
         plt.gca().xaxis.set_major_formatter(DateFormatter('%H:%m'))
@@ -212,7 +243,21 @@ if __name__ == '__main__':
 #    f = open('distance_vs_covariance.txt', 'w')
 #    for i in range(Dt.shape[0]):
 #        f.write('%g,%g\n' % (Dt[i], Ct[i]))
-#    f.close() 
+#    f.close()
+
+    # plot the covariance vs. distance from the viewpoint of each station
+    for i in range(len(stations)):
+        n = stations[i].get_name()
+        ci = C[i,:].copy()
+        di = D[i,:].copy()
+        ndx = np.argsort(di)
+        ci, di = ci[ndx], di[ndx]
+        plt.figure()
+        plt.plot(di, ci, 'o-')
+        plt.title('Distance vs. cov for station %s' % n)
+        plt.xlabel('Distance [km]')
+        plt.ylabel('Covariance [-]')
+        plt.savefig('results/%s_cov_vs_dist.png' % n)
 
 
     # **********************************************************************************
@@ -278,4 +323,17 @@ if __name__ == '__main__':
     plt.title('Aggregate plot of cc vs. distance')
     plt.savefig('results/station_residuals_correlation.png')
     
+    # plot the correlation coefficient vs. distance for each station
+    for i in range(len(stations)):
+        n = stations[i].get_name()
+        ci = C[i,:].copy()
+        di = D[i,:].copy()
+        ndx = np.argsort(di)
+        ci, di = ci[ndx], di[ndx]
+        plt.figure()
+        plt.plot(di, ci, 'o-')
+        plt.title('Distance vs. corr. coef. for station %s' % n)
+        plt.xlabel('Distance [km]')
+        plt.ylabel('Covariance [-]')
+        plt.savefig('results/%s_cc_vs_dist.png' % n)
     

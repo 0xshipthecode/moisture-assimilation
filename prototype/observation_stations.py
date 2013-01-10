@@ -340,7 +340,10 @@ class MesoWestStation(Station):
             # parse the variables in order
             for j in range(len(cell_ord)):
                 try:
-                    var_ord[j].append(float(s.cell_value(i,cell_ord[j])))
+                    val = float(s.cell_value(i,cell_ord[j]))
+                    if var_ord[j] == self.obs_vars['fm10']:
+                        val = val / 100.0
+                    var_ord[j].append(val)
                 except ValueError:
                     var_ord[j].append(float('nan'))
                     self.data_loaded_ok = False

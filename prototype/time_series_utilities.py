@@ -61,7 +61,7 @@ def match_time_series(stations, st_field_name, field, W):
     return matched
 
 
-def build_observation_data(stations, obs_type, wrf_data):
+def build_observation_data(stations, obs_type, wrf_data, mtm):
     """
     Repackage the matched time series into a time-indexed structure which gives details on the observed data and active observation stations.
     
@@ -73,7 +73,7 @@ def build_observation_data(stations, obs_type, wrf_data):
     # accumulate all observations from stations
     observations = []
     for s in stations:
-        observations.extend(s.get_observations_for_times(obs_type, wrf_data.get_times())[1])
+        observations.extend(s.get_observations_for_times(obs_type, mtm))
 
     # repackage all the observations into a time-indexed structure which groups
     # observations at the same time together
