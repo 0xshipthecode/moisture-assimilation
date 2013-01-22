@@ -27,7 +27,7 @@ import string
 
 
 station_data_dir = "../real_data/colorado_stations/"
-
+wrf_data_file = "wrfout_sel_1km.nc"
 
 def compute_model_equi_fm(H_Percent, T_Kelvin):
     """
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     si_list = filter(lambda x: len(x) > 0, map(string.strip, si_list))
 
     # load wrf model data
-    wrf_data = WRFModelData(os.path.join(station_data_dir, 'wrfout_sel.nc'),
+    wrf_data = WRFModelData(os.path.join(station_data_dir, wrf_data_file),
                             fields = ['T2', 'Q2', 'PSFC', 'EFMS', 'FMC_EQUI'],
                             tz_name = 'GMT')
     lon, lat, tm = wrf_data.get_lons(), wrf_data.get_lats(), wrf_data.get_times()
