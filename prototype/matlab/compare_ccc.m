@@ -21,7 +21,7 @@ wcT = rel(wT);
 
 
 % extract and vectorize upper triangular parts
-utri = triu(true(39),1);
+utri = triu(true(38),1);
 dt = d(utri);
 wdt = wd(utri);
 et = e(utri);
@@ -53,4 +53,10 @@ plot(dt, cTt, 'ro', wdt, wcTt, 'go');
 title(sprintf('%s vs. distance for stations and for model T2', rel_str));
 legend('station', 'wrf');
 saveas(gcf, sprintf('%s_vs_dist_T2.png', rel_str), 'png');
+
+% Show some correlations
+fprintf('Correlation/Covariances between model and experimental variables\n')
+fprintf('Temp: pearson  %g  spearman %g\n', corr(cTt,wcTt), corr(cTt,wcTt,'type','spearman'));
+fprintf('fm10: pearson  %g  spearman %g\n', corr(ct,wct), corr(ct,wct,'type','spearman'));
+fprintf('distance: pearson  %g  spearman %g\n', corr(dt,wdt), corr(dt,wdt,'type','spearman'));
 

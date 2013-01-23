@@ -53,7 +53,7 @@ if __name__ == '__main__':
 
     # load stations and match then to grid points
     # load station data from files
-    with open(os.path.join(station_data_dir, 'station_infos'), 'r') as f:
+    with open(os.path.join(station_data_dir, 'clean_stations'), 'r') as f:
         si_list = f.read().split('\n')
 
     si_list = filter(lambda x: len(x) > 0, map(string.strip, si_list))
