@@ -27,7 +27,8 @@ import string
 
 
 station_data_dir = "../real_data/colorado_stations/"
-wrf_data_file = "wrfout_sel_1km.nc"
+wrf_data_file = "wrfout_sel_5km.nc"
+fm_var_name = 'EFMS'
 
 def compute_model_equi_fm(H_Percent, T_Kelvin):
     """
@@ -60,10 +61,10 @@ if __name__ == '__main__':
 
     # load wrf model data
     wrf_data = WRFModelData(os.path.join(station_data_dir, wrf_data_file),
-                            fields = ['T2', 'Q2', 'PSFC', 'EFMS', 'FMC_EQUI'],
+                            fields = ['T2', 'Q2', 'PSFC', fm_var_name, 'FMC_EQUI'],
                             tz_name = 'GMT')
     lon, lat, tm = wrf_data.get_lons(), wrf_data.get_lats(), wrf_data.get_times()
-    efms, wrf_equi = wrf_data['EFMS'], wrf_data['FMC_EQUI']
+    efms, wrf_equi = wrf_data[fm_var_name], wrf_data['FMC_EQUI']
     T2 = wrf_data['T2']
 
     print('Loaded %d times from WRF output (%s - %s).' % (len(tm), str(tm[0]), str(tm[-1])))
@@ -183,6 +184,7 @@ if __name__ == '__main__':
         wT[:, sndx] = np.array(T2[wrf_tndx, i, j])
         equiw = np.array(wrf_equi[wrf_tndx, 1, i, j])
         equiw[equiw > 1.0] = 0.0
+
         plt.figure()
         plt.plot(mtm, equis, 'r+-', mtm, fm10s, 'rx-', mtm, equiw, 'g+-',mtm, fm10w, 'gx-')
         plt.title('fm10 and equi in WRF and in station %s' % s.get_name())
@@ -192,8 +194,29 @@ if __name__ == '__main__':
             l.set_rotation(90)
 
         plt.savefig('results/%s_fm10_vs_equi.png' % s.get_name())
+
+        plt.figure()
+        plt.title('T2 in WRF and in station %s' % s.get_name())
+        plt.plot(mtm, Tso, 'r+-', mtm, wT[:, sndx] - 273.15, 'g+-')
+        plt.legend(['st. T', 'WRF T2'])
+        plt.gca().xaxis.set_major_formatter(DateFormatter('%H:%m'))
+        for l in plt.gca().get_xticklabels():
+            l.set_rotation(90)
+
+        plt.savefig('results/%s_T2.png' % s.get_name())
         
         residuals[s.get_name()] = fm10s - fm10w
+
+        plt.figure()
+        plt.title('Residuals station vs. WRF and in station %s' % s.get_name())
+        plt.plot(mtm, fm10s-fm10w, 'r+-', mtm, fm10w-equis, 'bx-')
+        plt.legend(['st. vs. WRF', 'st. vs. st_equi'])
+        plt.gca().xaxis.set_major_formatter(DateFormatter('%H:%m'))
+        for l in plt.gca().get_xticklabels():
+            l.set_rotation(90)
+        plt.savefig('results/%s_residuals.png')
+       
+
  
     # **********************************************************************************
     # compute COVARIANCE between station residuals and plot this vs. distance
