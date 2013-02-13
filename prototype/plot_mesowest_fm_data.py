@@ -133,13 +133,14 @@ if __name__ == '__main__':
     gammas = []
     residuals = {}
     ot = []
+    plot_ndx = 0
     for t in range(Nt):
         if tm[t] in obs_data:
             ot.append(t)
             obs_at_t = np.array(obs_data[tm[t]])
-            mfm.fit_to_data(E[t, :, :], obs_at_t)
+            mfm.fit_to_data(efms[t, :, :], obs_at_t)
             gammas.append(mfm.gamma)
-            mu = mfm.predict_field(E[t,:,:])
+            mu = mfm.predict_field(efms[t,:,:])
             
             x, y, c = [], [], []
             for obs in obs_at_t:
@@ -151,19 +152,19 @@ if __name__ == '__main__':
                 i, j = obs.get_nearest_grid_point()
                 sn = obs.get_station().get_name()
                 rs = residuals[sn] if sn in residuals else []
-                rs.append(obs.get_value() - E[t, i, j] * gammas[-1])
+                rs.append(obs.get_value() - efms[t, i, j] * gammas[-1])
                 residuals[sn] = rs
 
             # construct a plot for this time
             plt.clf()
-            render_spatial_field(m, lon, lat, E[t,:,:] * gammas[-1], 'Equilibrium moisture')
+            render_spatial_field(m, lon, lat, efms[t,:,:] * gammas[-1], 'Moisture model estimate')
+            plt.title('Equilibrium moisture at %s' % str(tm[t]))
             m.drawparallels(np.arange(llcrnrlat,urcrnrlat,1.0))
             m.drawmeridians(np.arange(llcrnrlon,urcrnrlon,1.0))
             x, y = m(x, y)
             plt.scatter(x, y, c=c)
-            plt.savefig('results/field_%04d.png' % t)
-
-    blabla
+            plt.savefig('results/field_%04d.png' % plot_ndx)
+            plot_ndx += 1
 
     gammas = np.array(gammas)
     ot = np.array(ot)
