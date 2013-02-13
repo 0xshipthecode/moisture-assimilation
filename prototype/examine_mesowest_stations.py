@@ -30,6 +30,7 @@ station_data_dir = "../real_data/colorado_stations/"
 wrf_data_file = "wrfout_sel_5km.nc"
 fm_var_name = 'EFMS'
 
+
 def compute_model_equi_fm(H_Percent, T_Kelvin):
     """
     Compute the equilibrium temperature given by the

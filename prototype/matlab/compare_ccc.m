@@ -1,4 +1,4 @@
-% load all the examine_mesowest_stations.py output
+%% load all the examine_mesowest_stations.py output
 d = load('distance_matrix.txt');
 wd = load('wdistance_matrix.txt');
 e = load('elevations.txt');
@@ -7,12 +7,14 @@ T = load('T_data.txt');
 wf = load('wfm10_data.txt');
 wT = load('wT_data.txt');
 
-% extract cov or corr matrices
+%% extract cov or corr matrices
 rel = @corrcoef;
 rel_str = 'cc';
 
 % rel = @cov;
 % rel_str = 'cov';
+
+%sel = [  3, 5, 7, 8, 9, 11, 15, 16, 22, 25, 28, 30, 32, 33];
 
 c = rel(f);
 wc = rel(wf);
@@ -20,7 +22,7 @@ cT = rel(T);
 wcT = rel(wT);
 
 
-% extract and vectorize upper triangular parts
+%% extract and vectorize upper triangular parts
 utri = triu(true(38),1);
 dt = d(utri);
 wdt = wd(utri);

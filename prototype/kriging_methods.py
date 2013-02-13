@@ -128,7 +128,8 @@ def universal_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_st
     res_obs = np.asmatrix(obs_vals - mu_obs).T
     
     # construct the covariance matrix and invert it
-    C = np.asmatrix(construct_spatial_correlation_matrix2(station_lonlat))
+#    C = np.asmatrix(construct_spatial_correlation_matrix2(station_lonlat))
+    C = np.asmatrix(np.zeros((Nobs, Nobs)))
     oS = np.asmatrix(np.diag(obs_stds))
     Sigma = oS.T * C * oS + np.diag(measV)
     SigInv = np.linalg.inv(Sigma)
@@ -148,7 +149,8 @@ def universal_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_st
 	# compute the covariance array anew for each grid point
         for k in range(Nobs):
             lon, lat = station_lonlat[k]
-            cc = max(0.8565 - 0.0063 * great_circle_distance(mlons[p], mlats[p], lon, lat), 0.0)
+#           cc = max(0.8565 - 0.0063 * great_circle_distance(mlons[p], mlats[p], lon, lat), 0.0)
+            cc = 0.0
             cov[k,0] = mod_stds[p] * cc * obs_stds[k]
         
         csi = SigInv * (cov - ovm * xsx_1 * (xs * cov - mu_mod[p]))
@@ -157,4 +159,3 @@ def universal_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_st
         V[p] = mod_stds[p]**2 - cov.T * SigInv * cov + tmp * xsx_1 * tmp
 
     return K, V
-    
