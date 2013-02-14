@@ -14,7 +14,7 @@ from wrf_model_data import WRFModelData
 #from cell_model import CellMoistureModel
 from cell_model_opt import CellMoistureModel
 from mean_field_model import MeanFieldModel
-from observation_stations import Station
+from observation_stations import StationAdam
 from diagnostics import init_diagnostics, diagnostics
 from online_variance_estimator import OnlineVarianceEstimator
 
@@ -83,12 +83,14 @@ def run_module():
     
     # load station data from files
     tz = pytz.timezone('US/Pacific')
-    stations = [Station(os.path.join(station_data_dir, s), tz, wrf_data) for s in station_list]
-    for s in stations:
+    stations = [StationAdam() for s in station_list]
+    for (s,sname) in zip(stations, station_list):
+        s.load_station_data(os.path.join(station_data_dir, sname), tz)
+        s.register_to_grid(wrf_data)
         s.set_measurement_variance('fm10', 0.05)
     
     # build the observation data structure indexed by time
-    obs_data_fm10 = build_observation_data(stations, 'fm10', wrf_data)
+    obs_data_fm10 = build_observation_data(stations, 'fm10', wrf_data, tm)
     
     # construct initial conditions
     E = 0.5 * (Ed[1,:,:] + Ew[1,:,:])

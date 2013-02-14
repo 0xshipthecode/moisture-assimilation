@@ -75,27 +75,32 @@ class Station:
     An observation station which stores and yields observations.
     All times must be in GMT.
     """
-    def __init__(self, wrf_data=None):
+    def __init__(self):
         """
         Load a station from data file.
         """
         # array of observation times and dictionary of obs variables
         self.tm = []
         self.obs_vars = {}
-        
-        # only co-register to grid if required
-        if wrf_data is not None:
-            mlon, mlat = wrf_data.get_lons(), wrf_data.get_lats()
-            self.grid_pt = find_closest_grid_point(self.lon, self.lat, mlon, mlat)
-            self.dist_grid_pt =  great_circle_distance(self.lon, self.lat,
-                                                       mlon[self.grid_pt], mlat[self.grid_pt])
-        else:
-            self.grid_pt = None
-            self.dist_grid_pt = None
-    
+
+        # no co-registration by default
+        self.grid_pt = None
+        self.dist_grid_pt = None
+
         # the measurement variance of different observations is unknown
         self.measurement_variance = {}
-        
+
+
+    def register_to_grid(self, wrf_data):
+        """
+        Find the nearest grid point to the current location.
+        """
+        # only co-register to grid if required
+        mlon, mlat = wrf_data.get_lons(), wrf_data.get_lats()
+        self.grid_pt = find_closest_grid_point(self.lon, self.lat, mlon, mlat)
+        self.dist_grid_pt =  great_circle_distance(self.lon, self.lat,
+                                                   mlon[self.grid_pt], mlat[self.grid_pt])
+
 
     def get_name(self):
         """
@@ -192,12 +197,16 @@ class StationAdam(Station):
     the format Adam sent to me for the Witch Creek data.
     """
     
-    def __init__(self, wrf_data):
+    def __init__(self):
         """
         Load a station from data file.
         """
-        Station.__init__(self, wrf_data)
+        Station.__init__(self)
         
+        # construct empty variable lists for what we wish to load
+        for var in [ 'air_temp', 'rh', 'fm10', 'fuel_temp', 'rain']:
+            self.obs_vars[var] = []
+
 
     def load_station_data(self, station_file, tz):
         """
@@ -254,11 +263,11 @@ class StationAdam(Station):
                     print fields
                     
                 self.tm.append(mtime)
-                self.air_temp.append(float(fields[5]))
-                self.fuel_temp.append(float(fields[6]))
-                self.fm10.append(float(fields[7]) / 100.0)
-                self.rh.append(float(fields[8]))
-                self.rain.append(float(fields[11]))
+                self.obs_vars['air_temp'].append(float(fields[5]))
+                self.obs_vars['fuel_temp'].append(float(fields[6]))
+                self.obs_vars['fm10'].append(float(fields[7]) / 100.0)
+                self.obs_vars['rh'].append(float(fields[8]))
+                self.obs_vars['rain'].append(float(fields[11]))
                 l = f.readline()
             
             while l[:5] != 'Daily' and len(l) > 0:
@@ -291,12 +300,14 @@ class MesoWestStation(Station):
         self.lon = float(tokens[2])
         self.elevation = float(tokens[3]) * 0.3048
 
-        Station.__init__(self, wrf_data)
+        Station.__init__(self)
+
+        # register to WRF grid
+        self.register_to_grid(wrf_data)
         
         # construct empty variable lists for what we wish to load
-        self.obs_vars['air_temp'] = []
-        self.obs_vars['rh'] = []
-        self.obs_vars['fm10'] = []
+        for var in [ 'air_temp', 'rh', 'fm10' ]:
+            self.obs_vars[var] = []
 
 
     def load_station_data(self, station_file):
