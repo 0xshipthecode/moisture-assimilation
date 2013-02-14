@@ -8,7 +8,7 @@ Created on Sun Oct 28 18:14:36 2012
 from spatial_model_utilities import render_spatial_field_fast, great_circle_distance
 from time_series_utilities import build_observation_data
 
-from kriging_methods import simple_kriging_data_to_model, universal_kriging_data_to_model
+from kriging_methods import universal_kriging_data_to_model
 
 from wrf_model_data import WRFModelData
 from cell_model_opt import CellMoistureModel
@@ -23,6 +23,7 @@ import os
 import sys
 import pytz
 import cPickle
+import string
 
 
 def run_module():
@@ -51,7 +52,14 @@ def run_module():
     diagnostics().configure_tag("kriging_variance", False, False, True)
     diagnostics().configure_tag("kriging_obs_res_var", False, False, True)
     
-    wrf_data = WRFModelData(cfg['input_file'])
+    # load stations and match then to grid points
+    # load station data from files
+    with open(os.path.join(cfg['station_data_dir'], cfg['station_list_file']), 'r') as f:
+        si_list = f.read().split('\n')
+
+    si_list = filter(lambda x: len(x) > 0, map(string.strip, si_list))
+
+    wrf_data = WRFModelData(cfg['input_file'], tz_name = 'US/Mountain')
     
     # read in vars
     lat, lon = wrf_data.get_lats(), wrf_data.get_lons()
@@ -65,25 +73,28 @@ def run_module():
         code = sinfo.split(',')[0]
         mws = MesoWestStation(sinfo, wrf_data)
         for suffix in [ '_1', '_2', '_3', '_4', '_5', '_6', '_7' ]:
-            mws.load_station_data(os.path.join(station_data_dir, '%s%s.xls' % (code, suffix)))
+            mws.load_station_data(os.path.join(cfg['station_data_dir'], '%s%s.xls' % (code, suffix)))
         stations.append(mws)
 
     print('Loaded %d stations.' % len(stations))
     
+    # check stations for nans
+    stations = filter(MesoWestStation.data_ok, stations)
+    print('Have %d stations with complete data.' % len(stations))
+
     # find maximum moisture overall to set up visualization
 #    maxE = max(np.max(Ed), np.max(Ew)) * 1.2
     maxE = 0.3
     
     # obtain sizes
-    Nt = rain.shape[0]
+    Nt = len(tm)
     dom_shape = lat.shape
     
-    # load station data from files
-    stations = [Station(os.path.join(station_data_dir, s), tz, wrf_data) for s in station_list]
+    # set the measurement variance of the stations
     for s in stations:
-        s.set_measurement_variance('fm10', 0.05)
+        s.set_measurement_variance('fm10', 0.1)
     
-    # build the observation data structure indexed by time
+    # build the observation data
     obs_data_fm10 = build_observation_data(stations, 'fm10', wrf_data, tm)
     
     # construct initial conditions
@@ -92,7 +103,8 @@ def run_module():
     # set up parameters
     Q = np.eye(9) * 0.001
     P0 = np.eye(9) * 0.01
-    dt = 10.0 * 60
+    dt = (tm[1] - tm[0]).seconds
+    print("Computed timestep from WRF is is %g seconds." % dt)
     K = np.zeros_like(E)
     V = np.zeros_like(E)
     mV = np.zeros_like(E)
@@ -125,7 +137,7 @@ def run_module():
     
     # run model
     for t in range(1, Nt):
-        model_time = wrf_data.get_times()[t]
+        model_time = tm[t]
         print("Time: %s, step: %d" % (str(model_time), t))
 
         # pre-compute equilibrium moisture to save a lot of time

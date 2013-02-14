@@ -73,7 +73,7 @@ def build_observation_data(stations, obs_type, wrf_data, mtm):
     # accumulate all observations from stations
     observations = []
     for s in stations:
-        observations.extend(s.get_observations_for_times(obs_type, mtm))
+        observations.extend(s.get_observations(obs_type))
 
     # repackage all the observations into a time-indexed structure which groups
     # observations at the same time together

@@ -1,6 +1,6 @@
 
-PYTHONDIR=/usr/include/python2.7
-NPDIR=$(HOME)/.local/lib/python2.7/site-packages/numpy/core/include
+PYTHONDIR=`python-config --includes`
+NPDIR=$(HOME)/.local/lib/python2.6/site-packages/numpy/core/include
 
 all: cell_model_opt.so
 

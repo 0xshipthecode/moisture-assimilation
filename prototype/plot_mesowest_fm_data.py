@@ -19,11 +19,13 @@ from matplotlib.dates import DateFormatter
 import pytz
 import os
 import string
+from multiprocessing import Pool
 
 
 station_data_dir = "../real_data/colorado_stations/"
 wrf_data_file = "wrfout_sel_1km.nc"
-fm_var_name = 'EFMS'
+#fm_var_name = 'EFMS'
+fm_var_name = 'FMC_GC'
 
 
 def compute_model_equi_fm(H_Percent, T_Kelvin):
@@ -42,6 +44,25 @@ def compute_model_equi_fm(H_Percent, T_Kelvin):
     Ew *= 0.01
 
     return 0.5 * (Ed + Ew)
+
+
+def render_plot_frame(x):
+
+    (m, lon, lat, rect, field, ttl, x, y, c, clim, plot_ndx) = x
+
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(12,10))
+    render_spatial_field(m, lon, lat, field, ttl)
+    m.drawparallels(np.arange(rect[0], rect[1], 1.0))
+    m.drawmeridians(np.arange(rect[2], rect[3],1.0))
+    x, y = m(x, y)
+    plt.scatter(x, y, c=c)
+    if clim is not None:
+        plt.clim(clim)
+    plt.colorbar()
+    plt.savefig('results/field_%04d.png' % plot_ndx)
+
 
 
 if __name__ == '__main__':
@@ -63,9 +84,14 @@ if __name__ == '__main__':
     efms, wrf_equi = wrf_data[fm_var_name], wrf_data['FMC_EQUI']
     T2 = wrf_data['T2']
 
-    print('Loaded %d times from WRF output (%s - %s).' % (len(tm), str(tm[0]), str(tm[-1])))
+    # select fm10 only from equilibrium and from efms
+    efms = efms[:, 1, :, :]
+    wrf_equi = wrf_equi[:, 1, :, :]
 
-    print(map(lambda x: str(x), tm))
+    # find maxima and minima
+    fm_min, fm_max = np.amin(efms), np.amax(efms)
+
+    print('Loaded %d times from WRF output (%s - %s).' % (len(tm), str(tm[0]), str(tm[-1])))
 
     # for each station id, load the station
     stations = []
@@ -92,6 +118,8 @@ if __name__ == '__main__':
     Ed, Ew = wrf_data.get_moisture_equilibria()
     E = 0.5 * (Ed + Ew)
 
+    efms[0,:,:] = E[0,:,:]
+
     mfm = MeanFieldModel()
 
     # construct basemap for rendering
@@ -108,7 +136,7 @@ if __name__ == '__main__':
 
     # show the equilibrium field and render position of stations on top
     plt.figure(figsize=(12,10))
-#    render_spatial_field(m, lon, lat, E[0,:,:], 'Equilibrium moisture')
+    render_spatial_field(m, lon, lat, E[0,:,:], 'Equilibrium moisture')
     m.drawparallels(np.arange(llcrnrlat,urcrnrlat,1.0))
     m.drawmeridians(np.arange(llcrnrlon,urcrnrlon,1.0))
     for s in stations:
@@ -117,8 +145,8 @@ if __name__ == '__main__':
         plt.plot(x, y, 'o', markersize = 8, markerfacecolor = 'magenta')
         plt.text(x, y, s.get_name(), color = 'black')
 
-    x, y = m(lon.ravel(), lat.ravel())
-    plt.plot(x, y, 'k+', markersize = 4)
+#    x, y = m(lon.ravel(), lat.ravel())
+#    plt.plot(x, y, 'k+', markersize = 4)
     plt.savefig('results/station_localization.png')
 
     # find common observation times for the station and for the WRF model
@@ -134,10 +162,13 @@ if __name__ == '__main__':
     residuals = {}
     ot = []
     plot_ndx = 0
+    rect = (llcrnrlat,urcrnrlat,llcrnrlon,urcrnrlon)
+    job_list = []
+    mst_tz = pytz.timezone('US/Mountain')
     for t in range(Nt):
-        if tm[t] in obs_data:
+        if mtm[t] in obs_data:
             ot.append(t)
-            obs_at_t = np.array(obs_data[tm[t]])
+            obs_at_t = np.array(obs_data[mtm[t]])
             mfm.fit_to_data(efms[t, :, :], obs_at_t)
             gammas.append(mfm.gamma)
             mu = mfm.predict_field(efms[t,:,:])
@@ -156,15 +187,17 @@ if __name__ == '__main__':
                 residuals[sn] = rs
 
             # construct a plot for this time
-            plt.clf()
-            render_spatial_field(m, lon, lat, efms[t,:,:] * gammas[-1], 'Moisture model estimate')
-            plt.title('Equilibrium moisture at %s' % str(tm[t]))
-            m.drawparallels(np.arange(llcrnrlat,urcrnrlat,1.0))
-            m.drawmeridians(np.arange(llcrnrlon,urcrnrlon,1.0))
-            x, y = m(x, y)
-            plt.scatter(x, y, c=c)
-            plt.savefig('results/field_%04d.png' % plot_ndx)
+            job_list.append((m, lon, lat, rect, efms[t,:,:]*gammas[-1],
+                             'Moisture field vs. data at %s' % mtm[t].astimezone(mst_tz),
+                             x, y, c, (fm_min, fm_max), plot_ndx))
             plot_ndx += 1
+        else:
+            print('Possible error: no obs data for time %s !' % mtm[t])
+
+    # render images in parallel
+    pool = Pool()
+    pool.map(render_plot_frame, job_list)
+    pool.close()
 
     gammas = np.array(gammas)
     ot = np.array(ot)
@@ -197,10 +230,10 @@ if __name__ == '__main__':
 
         # obtain equilibrium at nearest grid point
         i, j = s.get_nearest_grid_point()
-        fm10w = np.array(efms[wrf_tndx, 1, i, j])
+        fm10w = np.array(efms[wrf_tndx, i, j])
         wfm10[:, sndx] = fm10w
         wT[:, sndx] = np.array(T2[wrf_tndx, i, j])
-        equiw = np.array(wrf_equi[wrf_tndx, 1, i, j])
+        equiw = np.array(wrf_equi[wrf_tndx, i, j])
         equiw[equiw > 1.0] = 0.0
 
         plt.figure()

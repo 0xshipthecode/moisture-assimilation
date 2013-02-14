@@ -166,12 +166,12 @@ class Station:
         return self.obs_vars[obs_name]
 
 
-    def get_observations(self, obs_name):
+    def get_observations(self, obs_type):
         """
         Returns a list of Observations for given observation type (var name).
         """
-        obs = self.get_observations_raw(obs_name)
-        mv = self.get_measurement_variance(obs_name)
+        obs = self.get_observations_raw(obs_type)
+        mv = self.get_measurement_variance(obs_type)
         return [Observation(self, self.tm[i], obs[i], mv, obs_type) for i in range(len(obs))]
 
         
