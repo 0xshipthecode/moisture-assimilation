@@ -32,7 +32,7 @@ class WRFModelData:
         """
         Load required variables from the file data_file.  A list of variables
         is either supplied or the default list is used which contains the following
-        variables: 'T2', 'Q2', 'PSFC', 'XLAT', 'XLONG', 'RAINNC'.  The fields
+        variables: 'T2', 'Q2', 'PSFC', 'RAINNC'.  The fields
         'Times', 'XLAT', 'XLONG' are always loaded.
         """
         

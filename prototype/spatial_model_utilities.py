@@ -55,22 +55,24 @@ def equilibrium_moisture(P, Q, T):
     
 
 
-def render_spatial_field(m, lon, lat, field, title):
+def render_spatial_field(m, lon, lat, field, title, clim = None):
     """
     Render a geo field over a basemap.  However the standard basemap
     does not seem to have sufficient resolution.
     TODO: can I obtain more detailed topography?
     """
-    dx = (np.max(lon) - np.min(lon)) / 5
-    dy = (np.max(lat) - np.min(lat)) / 5
-    lat_rng = (np.min(lat), np.max(lat))
-    lon_rng = (np.min(lon), np.max(lon))
-    m.drawparallels(np.arange(lat_rng[0],lat_rng[1], dy))
-    m.drawmeridians(np.arange(lon_rng[0],lon_rng[1], dx))
+#    dx = (np.max(lon) - np.min(lon)) / 5
+#    dy = (np.max(lat) - np.min(lat)) / 5
+#    lat_rng = (np.min(lat), np.max(lat))
+#    lon_rng = (np.min(lon), np.max(lon))
+#    m.drawparallels(np.arange(lat_rng[0],lat_rng[1], dy))
+#    m.drawmeridians(np.arange(lon_rng[0],lon_rng[1], dx))
     m.drawcoastlines()
 #    imf = m.transform_scalar(field.ravel(), lon.ravel(), lat.ravel(), lon.shape[0], lat.shape[1])
     x, y = m(lon, lat)
-    m.pcolormesh(x, y, field, alpha = 0.6, edgecolor = 'none')
+    m.pcolormesh(x, y, field, alpha = 0.6, edgecolor = 'none') 
+    if clim is not None:
+        plt.clim(clim)
     plt.title(title)
     
 
