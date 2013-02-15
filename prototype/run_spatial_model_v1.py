@@ -8,7 +8,7 @@ Created on Sun Oct 28 18:14:36 2012
 from spatial_model_utilities import render_spatial_field_fast, great_circle_distance
 from time_series_utilities import build_observation_data
 
-from kriging_methods import simple_kriging_data_to_model, universal_kriging_data_to_model
+from kriging_methods import universal_kriging_data_to_model
 
 from wrf_model_data import WRFModelData
 #from cell_model import CellMoistureModel
