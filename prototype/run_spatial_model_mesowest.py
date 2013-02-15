@@ -92,7 +92,7 @@ def run_module():
     
     # set the measurement variance of the stations
     for s in stations:
-        s.set_measurement_variance('fm10', 0.1)
+        s.set_measurement_variance('fm10', cfg['fm10_meas_var'])
     
     # build the observation data
     obs_data_fm10 = build_observation_data(stations, 'fm10', wrf_data, tm)
@@ -101,10 +101,10 @@ def run_module():
     E = 0.5 * (Ed[1,:,:] + Ew[1,:,:])
     
     # set up parameters
-    Q = np.eye(9) * 0.001
-    P0 = np.eye(9) * 0.01
+    Q = np.eye(9) * cfg['Q']
+    P0 = np.eye(9) * cfg['P0']
     dt = (tm[1] - tm[0]).seconds
-    print("Computed timestep from WRF is is %g seconds." % dt)
+    print("INFO: Computed timestep from WRF is is %g seconds." % dt)
     K = np.zeros_like(E)
     V = np.zeros_like(E)
     mV = np.zeros_like(E)
@@ -158,7 +158,6 @@ def run_module():
             mV[pos] = models[p].get_state_covar()[1,1]
             cV12[pos] = models[p].get_state_covar()[0,1]
             mid[p] = models[p].get_model_ids()[1]
-            
 
         # run Kriging on each observed fuel type
         Kf = []
@@ -166,6 +165,7 @@ def run_module():
         fn = []
         for obs_data, fuel_ndx in [ (obs_data_fm10, 1) ]:
 
+            # run the kriging subsystem and the Kalman update only if we have observations
             if model_time in obs_data:
 
                 # fit the current estimation of the moisture field to the data 
@@ -239,8 +239,6 @@ def run_module():
         plt.clim([0.0, maxE])
         plt.colorbar()
         plt.subplot(3,3,4)
-#        render_spatial_field_fast(m, lon, lat, cV12, 'State cov. 1hr/10hr fuel')        
-#        plt.colorbar()
         render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain for 1-hr fuel')  
         plt.clim([0.0, 333.0])        
         plt.colorbar()

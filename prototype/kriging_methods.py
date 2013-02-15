@@ -169,14 +169,16 @@ def trend_surface_model_kriging(obs_data, wrf_data, mu_mod):
     The kriging results in the matrix K, which contains the kriged observations
     and the matrix V, which contains the kriging variance.
     """
-    mlons, mlats = wrf_data.get_lons(), wrf_data.get_lats()
-    K = np.zeros_like(mlons)
-    V = np.zeros_like(mlons)
-    Nobs = len(obs_data)
+    K = np.zeros_like(X)
+    V = np.zeros_like(X)
     obs_vals = np.zeros((Nobs,))
     station_lonlat = []
     gridndx = []
     mu_obs = np.zeros((Nobs,))
+    Xobs = np.zeros((Nobs,))
+
+    for (obs,i) in zip(obs_data, range(len(obs_data))):
+        mu_obs[i] = mu_mod[obs.get_nearest_grid_point()]
 
     # FIXME: we assume that the measurement variance is the same for all stations
     sigma2 = obs_data[0].get_measurement_variance()
@@ -185,9 +187,10 @@ def trend_surface_model_kriging(obs_data, wrf_data, mu_mod):
     K[:] = mu_mod
 
     # precompute the inverse of the dot product
-    XtX_1 = 1.0 / np.sum(mu_mod * mu_mod)
+    XtX_1 = 1.0 / np.sum(mu_obs * mu_obs)
 
-    # We compute the kriging variance for each point
+    # We compute the kriging variance for each point (covariates should be used but
+    # since mu_mod is a scaled version of the covariates, the result is unchanged)
     for pos in np.ndindex(V.shape):
         V[pos] = sigma2 * (1 + mu_mod[pos] * XtX_1 * mu_mod[pos])
     
