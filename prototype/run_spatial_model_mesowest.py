@@ -73,12 +73,11 @@ def run_module():
     diagnostics().configure_tag("assim_K1", True, True, True)
     diagnostics().configure_tag("assim_data", False, False, True)
 
-    diagnostics().configure_tag("kriging_variance", False, False, True)
-
     diagnostics().configure_tag("obs_residual_var", True, True, True)
+
     diagnostics().configure_tag("fm10_model_residual_var", True, True, True)
-    diagnostics().configure_tag("fm10_model_var", True, True, True)
-    diagnostics().configure_tag("fm10_kriging_var", True, True, True)
+    diagnostics().configure_tag("fm10_model_var", False, True, True)
+    diagnostics().configure_tag("fm10_kriging_var", False, True, True)
 
     ### Load and preprocess WRF model data
 
@@ -192,14 +191,13 @@ def run_module():
             mV[p] = P[1,1]
             mid[p] = models[p].get_model_ids()[1]
 
-        diagnostics().push("fm10_model_var", np.mean(mV))
+        diagnostics().push("fm10_model_var", (t, np.mean(mV)))
 
         # run Kriging on each observed fuel type
         Kf = []
         Vf = []
         fn = []
         for obs_data, fuel_ndx in [ (obs_data_fm10, 1) ]:
-
 
             # run the kriging subsystem and the Kalman update only if we have observations
             if model_time in obs_data:
@@ -231,7 +229,7 @@ def run_module():
                 diagnostics().push("assim_data", (t, fuel_ndx, obs_vals, krig_vals, mod_vals, mod_na_vals))
                 plot_model_snapshot(cfg, tm, t, fuel_ndx, obs_vals, krig_vals, mod_vals, mod_na_vals)
 
-                diagnostics().push("fm10_kriging_var", np.mean(Vf_fn))
+                diagnostics().push("fm10_kriging_var", (t, np.mean(Vf_fn)))
 
                 # append to storage for kriged fields in this time instant
                 Kf.append(Kf_fn)
@@ -265,7 +263,6 @@ def run_module():
             # push new diagnostic outputs
             diagnostics().push("assim_K0", (t, np.mean(Kg[:,:,0])))
             diagnostics().push("assim_K1", (t, np.mean(Kg[:,:,1])))
-            diagnostics().push("kriging_variance", (t, np.mean(Vf_fn)))
 
         # prepare visualization data        
         f = np.zeros((dom_shape[0], dom_shape[1], 3))
@@ -312,20 +309,20 @@ def run_module():
         
         plt.savefig(os.path.join(cfg['output_dir'], 'moisture_model_t%03d.png' % t))
 
-        
-    # store the gamma coefficients
-    with open(os.path.join(cfg['output_dir'], 'gamma.txt'), 'w') as f:
-        f.write(str(diagnostics().pull('mfm_gamma')))
-        
+
+    # store the diagnostics in a binary file
+    diagnostics().dump_store(os.path.join(cfg['output_dir'], 'diagnostics.bin'))
+    
     # make a plot of gammas
     plt.figure()
-    plt.subplot(211)
-    plt.plot(diagnostics().pull('mfm_gamma'))
+    plt.plot(diagnostics().pull('mfm_gamma'), 'bo-')
     plt.title('Mean field model - gamma')
-    plt.subplot(212)
+    plt.savefig(os.path.join(cfg['output_dir'], 'plot_gamma.png'))
+
+    plt.figure()
     plt.plot(diagnostics().pull('skdm_cov_cond'))
     plt.title('Condition number of covariance matrix')
-    plt.savefig(os.path.join(cfg['output_dir'], 'plot_gamma.png'))
+    plt.savefig(os.path.join(cfg['output_dir'], 'plot_sigma_cond.png'))
 
     # make a plot for each substation
     plt.figure()
@@ -373,14 +370,14 @@ def run_module():
     plt.savefig(os.path.join(cfg['output_dir'], 'plot_fm10_model_residual_variance.png'))
 
     plt.figure()
-    plt.plot([d[0] for d in diagnostics().pull("kriging_variance")],
-             [d[1] for d in diagnostics().pull("kriging_variance")], 'ro-')
+    plt.plot([d[0] for d in diagnostics().pull("fm10_kriging_var")],
+             [d[1] for d in diagnostics().pull("fm10_kriging_var")], 'ro-')
     plt.title('Kriging field variance')
     plt.savefig(os.path.join(cfg['output_dir'], 'plot_kriging_variance.png'))
 
     plt.figure()
-    plt.plot([d[0] for d in diagnostics().pull("kriging_obs_res_var")],
-             [d[1] for d in diagnostics().pull("kriging_obs_res_var")], 'ro-')
+    plt.plot([d[0] for d in diagnostics().pull("obs_residual_var")],
+             [d[1] for d in diagnostics().pull("obs_residual_var")], 'ro-')
     plt.title('Observation residual variance')
     plt.savefig(os.path.join(cfg['output_dir'], 'plot_observation_residual_variance.png'))
     
@@ -389,8 +386,6 @@ def run_module():
     plt.title('Mean absolute prediction error of station data')
     plt.savefig(os.path.join(cfg['output_dir'], 'plot_station_mape.png'))
 
-    diagnostics().dump_store(os.path.join(cfg['output_dir'], 'diagnostics.bin'))
-    
     # as a last step encode all the frames as video
     os.system("cd %s; avconv -qscale 1 -r 20 -b 9600 -i moisture_model_t%%03d.png video.mp4" % cfg['output_dir'])
 
