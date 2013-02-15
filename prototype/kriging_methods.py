@@ -159,3 +159,38 @@ def universal_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_st
         V[p] = mod_stds[p]**2 - cov.T * SigInv * cov + tmp * xsx_1 * tmp
 
     return K, V
+
+
+
+
+def trend_surface_model_kriging(obs_data, wrf_data, mu_mod):
+    """
+    Trend surface model kriging, which assumes spatially uncorrelated errors.
+    The kriging results in the matrix K, which contains the kriged observations
+    and the matrix V, which contains the kriging variance.
+    """
+    mlons, mlats = wrf_data.get_lons(), wrf_data.get_lats()
+    K = np.zeros_like(mlons)
+    V = np.zeros_like(mlons)
+    Nobs = len(obs_data)
+    obs_vals = np.zeros((Nobs,))
+    station_lonlat = []
+    gridndx = []
+    mu_obs = np.zeros((Nobs,))
+
+    # FIXME: we assume that the measurement variance is the same for all stations
+    sigma2 = obs_data[0].get_measurement_variance()
+
+    # In a TSM, the kriging predictor is the same as the estimator
+    K[:] = mu_mod
+
+    # precompute the inverse of the dot product
+    XtX_1 = 1.0 / np.sum(mu_mod * mu_mod)
+
+    # We compute the kriging variance for each point
+    for pos in np.ndindex(V.shape):
+        V[pos] = sigma2 * (1 + mu_mod[pos] * XtX_1 * mu_mod[pos])
+    
+    diagnostics().push("skdm_cov_cond", 1.0)
+
+    return K, V

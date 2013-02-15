@@ -8,7 +8,7 @@ Created on Sun Oct 28 18:14:36 2012
 from spatial_model_utilities import render_spatial_field_fast, great_circle_distance
 from time_series_utilities import build_observation_data
 
-from kriging_methods import universal_kriging_data_to_model
+from kriging_methods import universal_kriging_data_to_model, trend_surface_model_kriging
 
 from wrf_model_data import WRFModelData
 from cell_model_opt import CellMoistureModel
@@ -189,11 +189,12 @@ def run_module():
                 mresV = mod_re.get_variance()
 
                 # krige data to observations
-                Kf_fn, Vf_fn = universal_kriging_data_to_model(obs_data[model_time], obs_re.get_variance() ** 0.5,
-                                                            predicted_field, wrf_data, mresV ** 0.5, t)
+#               Kf_fn, Vf_fn = universal_kriging_data_to_model(obs_data[model_time], obs_re.get_variance() ** 0.5,
+#                                                           predicted_field, wrf_data, mresV ** 0.5, t)
+                Kf_fn, Vf_fn = trend_surface_model_kriging(obs_data[model_time], wrf_data, predicted_field)
 
                 krig_vals = np.array([Kf_fn[o.get_nearest_grid_point()] for o in obs_data[model_time]])                
-                diagnostics().push("assim_data", (t, fuel_ndx, obs_vals, ngp_vals, krig_vals, mod_vals, mod_na_vals))
+#               diagnostics().push("assim_data", (t, fuel_ndx, obs_vals, ngp_vals, krig_vals, mod_vals, mod_na_vals))
 
                 # append to storage for kriged fields in this time instant
                 Kf.append(Kf_fn)
