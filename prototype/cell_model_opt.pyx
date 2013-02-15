@@ -201,7 +201,7 @@ cdef class CellMoistureModel:
             self.P += mQ
 
         # update to the new state
-        self.m_ext[:k] = m_new
+        self.m_ext[:k] = m_newOA
 
 
     def get_state(self):

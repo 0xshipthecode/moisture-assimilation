@@ -78,13 +78,20 @@ class WRFModelData:
         self.fields['LT'] = lt
         
         
-    def get_times(self):
+    def get_gmt_times(self):
+        """
+        Returns the local time (depends on time zone set).
+        """
+        return self['GMT']
+    
+    
+    def get_local_times(self):
         """
         Returns the local time (depends on time zone set).
         """
         return self['LT']
-    
-    
+
+
     def get_lons(self):
         """
         Return longitude of grid points.
@@ -132,21 +139,25 @@ class WRFModelData:
         P = self['PSFC']
         Q = self['Q2']
         T = self['T2'] 
+
+        Pi = 0.5 * (P[:-1,:,:] + P[1:,:,:])
+        Qi = 0.5 * (Q[:-1,:,:] + Q[1:,:,:])
+        Ti = 0.5 * (T[:-1,:,:] + T[1:,:,:])
     
         # saturated vapor pressure (at each location, size n x 1)
-        Pws = np.exp(54.842763 - 6763.22/T - 4.210 * np.log(T) + 0.000367*T + np.tanh(0.0415*(T - 218.8)) 
-            * (53.878 - 1331.22/T - 9.44523 * np.log(T) + 0.014025*T))
+        Pws = np.exp(54.842763 - 6763.22/Ti - 4.210 * np.log(Ti) + 0.000367*Ti + np.tanh(0.0415*(Ti - 218.8)) 
+            * (53.878 - 1331.22/Ti - 9.44523 * np.log(Ti) + 0.014025*Ti))
           
         # water vapor pressure (at each location, size n x 1)
-        Pw = P * Q / (0.622 + (1 - 0.622) * Q)
+        Pw = Pi * Qi / (0.622 + (1 - 0.622) * Qi)
         
         # relative humidity (percent, at each location, size n x 1)
         H = 100 * Pw / Pws;
         
         # drying/wetting fuel equilibrium moisture contents (location specific,
         # n x 1)
-        Ed = 0.924*H**0.679 + 0.000499*np.exp(0.1*H) + 0.18*(21.1 + 273.15 - T)*(1 - np.exp(-0.115*H))
-        Ew = 0.618*H**0.753 + 0.000454*np.exp(0.1*H) + 0.18*(21.1 + 273.15 - T)*(1 - np.exp(-0.115*H))
+        Ed = 0.924*H**0.679 + 0.000499*np.exp(0.1*H) + 0.18*(21.1 + 273.15 - Ti)*(1 - np.exp(-0.115*H))
+        Ew = 0.618*H**0.753 + 0.000454*np.exp(0.1*H) + 0.18*(21.1 + 273.15 - Ti)*(1 - np.exp(-0.115*H))
     
         Ed *= 0.01
         Ew *= 0.01
