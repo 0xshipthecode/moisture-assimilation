@@ -34,7 +34,7 @@ def plot_model_snapshot(cfg, tm, t, fuel_ndx, obs, krig, mod, mod_na):
 
     plt.plot(mod_na, 'go', markersize = 5)
     plt.plot(mod, 'bo', markersize = 5)
-    leg = [ 'Model+Assim', 'Model',]
+    leg = [ 'Model', 'Model+Assim']
     mx = max(max(mod), max(mod_na), 0.5)
 
     for (v,l,c) in [ (obs, 'Obs.', 'ro'), (krig, 'Kriged', 'mx') ]:
@@ -272,38 +272,47 @@ def run_module():
         plt.subplot(3,3,1)
         render_spatial_field_fast(m, lon, lat, f[:,:,0], '1-hr fuel')
         plt.clim([0.0, maxE])
+        plt.axis('off')
         plt.colorbar()
         plt.subplot(3,3,2)
         render_spatial_field_fast(m, lon, lat, f[:,:,1], '10-hr fuel')
         plt.clim([0.0, maxE])        
+        plt.axis('off')
         plt.colorbar()
         plt.subplot(3,3,3)
         render_spatial_field_fast(m, lon, lat, f_na[:,:,1], '10hr fuel - no assim')
         plt.clim([0.0, maxE])
+        plt.axis('off')
         plt.colorbar()
         plt.subplot(3,3,4)
         render_spatial_field_fast(m, lon, lat, Kg[:,:,0], 'Kalman gain for 1-hr fuel')  
         plt.clim([0.0, 3.0])        
+        plt.axis('off')
         plt.colorbar()
         plt.subplot(3,3,5)
         render_spatial_field_fast(m, lon, lat, Kg[:,:,1], 'Kalman gain for 10-hr fuel')       
         plt.clim([0.0, 1.0])        
+        plt.axis('off')
         plt.colorbar()
         plt.subplot(3,3,6)
 	render_spatial_field_fast(m, lon, lat, Kf_fn, 'Kriging field')
 	plt.clim([0.0, maxE])
+        plt.axis('off')
 	plt.colorbar()
         plt.subplot(3,3,7)
         render_spatial_field_fast(m, lon, lat, mid, 'Model ids')
         plt.clim([0.0, 5.0])
+        plt.axis('off')
         plt.colorbar()
         plt.subplot(3,3,8)
         render_spatial_field_fast(m, lon, lat, Vf_fn, 'Kriging variance')
         plt.clim([0.0, np.max(Vf_fn)])
+        plt.axis('off')
         plt.colorbar()
         plt.subplot(3,3,9)
         render_spatial_field_fast(m, lon, lat, mresV, 'Model res. variance')
         plt.clim([0.0, np.max(mresV)])
+        plt.axis('off')
         plt.colorbar()
         
         plt.savefig(os.path.join(cfg['output_dir'], 'moisture_model_t%03d.png' % t))
@@ -386,7 +395,7 @@ def run_module():
     plt.savefig(os.path.join(cfg['output_dir'], 'plot_station_mape.png'))
 
     # as a last step encode all the frames as video
-    os.system("cd %s; avconv -qscale 1 -r 20 -b 9600 -i moisture_model_t%%03d.png video.mp4" % cfg['output_dir'])
+#    os.system("cd %s; avconv -qscale 1 -r 20 -b 9600 -i moisture_model_t%%03d.png video.mp4" % cfg['output_dir'])
 
 
 if __name__ == '__main__':
