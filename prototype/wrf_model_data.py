@@ -32,13 +32,13 @@ class WRFModelData:
         """
         Load required variables from the file data_file.  A list of variables
         is either supplied or the default list is used which contains the following
-        variables: 'T2', 'Q2', 'PSFC', 'RAINNC'.  The fields
+        variables: 'T2', 'Q2', 'PSFC', 'RAINC', 'RAINNC'.  The fields
         'Times', 'XLAT', 'XLONG' are always loaded.
         """
         
         # replace empty array by default
         if var_names is None:
-            var_names = ['T2', 'Q2', 'PSFC', 'RAINNC']
+            var_names = ['T2', 'Q2', 'PSFC', 'RAINNC', 'RAINC']
             
         self.fields = {}
         
@@ -61,11 +61,41 @@ class WRFModelData:
         self.fields['GMT'] = tp
  
         d.close()
+
+        # if we have all the rain variables, compute the rainfall in each window
+        if all([v in var_names for v in ['RAINNC', 'RAINC']]):
+            self.compute_rainfall_per_timestep()
+            # remove the fields to reduce memory consumption
+            del self.fields['RAINNC']
+            del self.fields['RAINC']
         
         # precompute the equilibrium fields needed everywhere
         self.equilibrium_moisture()
 
-    
+
+    def compute_rainfall_per_timestep(self):
+        """
+        Compute the rainfall per timestep at each grid point from
+        WRF variables RAINNC and RAINC.
+        """
+        rainnc = self.fields['RAINNC']
+        rainc = self.fields['RAINC']
+        rain = np.zeros_like(rainnc)
+        rain_old = np.zeros_like(rainnc[0,:,:])
+        tm = self.fields['GMT']
+
+        # compute incremental rainfall and store it in mm/hr in the rain variable
+        for i in range(1, len(tm)):
+            t1 = tm[i-1]
+            t2 = tm[i]
+            dt = (t2 - t1).seconds
+            rain[i, :, :] = ((rainc[i,:,:] + rainnc[i,:,:]) - rain_old) * 3600.0 / dt
+            rain_old[:] = rainc[i,:,:]
+            rain_old += rainnc[i,:,:]
+
+        self.fields['RAIN'] = rain
+
+            
     def construct_local_time(self, tz_name):
         """
         Changes the local_time variable to a new timezone.  The local time
@@ -156,9 +186,11 @@ class WRFModelData:
         
         # drying/wetting fuel equilibrium moisture contents (location specific,
         # n x 1)
-        Ed = 0.924*H**0.679 + 0.000499*np.exp(0.1*H) + 0.18*(21.1 + 273.15 - Ti)*(1 - np.exp(-0.115*H))
-        Ew = 0.618*H**0.753 + 0.000454*np.exp(0.1*H) + 0.18*(21.1 + 273.15 - Ti)*(1 - np.exp(-0.115*H))
-    
+        Ed = np.zeros_like(P)
+        Ew = np.zeros_like(P)
+        Ed[1:,:,:] = 0.924*H**0.679 + 0.000499*np.exp(0.1*H) + 0.18*(21.1 + 273.15 - Ti)*(1 - np.exp(-0.115*H))
+        Ew[1:,:,:] = 0.618*H**0.753 + 0.000454*np.exp(0.1*H) + 0.18*(21.1 + 273.15 - Ti)*(1 - np.exp(-0.115*H))
+
         Ed *= 0.01
         Ew *= 0.01
         

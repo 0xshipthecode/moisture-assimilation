@@ -90,9 +90,8 @@ def run_module():
     Nt = cfg['Nt'] if cfg['Nt'] is not None else len(tm)
     dom_shape = lat.shape
 
-    # interpolate rain in the same way as equilibria are
-    rain = wrf_data['RAINNC']
-    rain = 0.5 * (rain[:-1,:,:] + rain[1:,:,:])
+    # retrieve the rain variable
+    rain = wrf_data['RAIN']
 
     # moisture equilibria are now computed from averaged Q,P,T at beginning and end of period
     Ed, Ew = wrf_data.get_moisture_equilibria()
@@ -132,8 +131,8 @@ def run_module():
     # find maximum moisture overall to set up visualization
     maxE = 0.5
     
-    # construct initial conditions
-    E = 0.5 * (Ed[0,:,:] + Ew[0,:,:])
+    # construct initial conditions from timestep 1 (because Ed/Ew at zero are zero)
+    E = 0.5 * (Ed[1,:,:] + Ew[1,:,:])
     
     # set up parameters
     Q = np.eye(9) * cfg['Q']
