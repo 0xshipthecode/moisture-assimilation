@@ -98,7 +98,7 @@ def simple_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_stds,
 
 
  
-def universal_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_stds, t):
+def universal_kriging_data_to_model(obs_data, obs_stds, m, wrf_data, mod_stds, t):
     """
     Universal kriging of data points to model points.  The kriging results in
     the matrix K, which contains the kriged observations and the matrix V,
@@ -112,6 +112,7 @@ def universal_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_st
     station_lonlat = []
     gridndx = []
     mu_obs = np.zeros((Nobs,))
+    m_pred = np.zeros((Nobs,))
     measV = np.zeros((Nobs,))
         
     # accumulate the indices of the nearest grid points
@@ -120,25 +121,40 @@ def universal_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_st
         gridndx.append(obs.get_nearest_grid_point())
         obs_vals[ndx] = obs.get_value()
         station_lonlat.append(obs.get_position())
-        mu_obs[ndx] = mu_mod[obs.get_nearest_grid_point()]
         measV[ndx] = obs.get_measurement_variance()
+        m_pred[ndx] = m[obs.get_nearest_grid_point()]
         ndx += 1
 
-    # compute observation residuals (using model fit from examine_station_data)
-    res_obs = np.asmatrix(obs_vals - mu_obs).T
-    
+    # convert lists to column vectors
+    m_pred = np.asmatrix(m_pred).T
+    obs_vals = np.asmatrix(obs_vals).T
+
     # construct the covariance matrix and invert it
     C = np.asmatrix(construct_spatial_correlation_matrix2(station_lonlat))
     oS = np.asmatrix(np.diag(obs_stds))
     Sigma = oS.T * C * oS + np.diag(measV)
     SigInv = np.linalg.inv(Sigma)
+
+    # estimate the fixed part of the model
+    gamma = np.linalg.inv(m_pred.T * SigInv * m_pred) * m_pred.T * SigInv * obs_vals
+    gamma = gamma[0,0]
+    mu_mod = m * gamma
+
+    ndx = 0
+    for obs in obs_data:
+        mu_obs[ndx] = mu_mod[obs.get_nearest_grid_point()]
+        ndx += 1
+
+    # compute observation residuals (using model fit from examine_station_data)
+    # and the mean absolute deviation
+    res_obs = np.asmatrix(obs_vals - mu_obs).T
+    mape = np.mean(np.abs(res_obs))
     
     diagnostics().push("skdm_cov_cond", np.linalg.cond(Sigma))
 
     # precompute some matrices
-    ovm = np.asmatrix(obs_vals).T
-    xs = ovm.T * SigInv
-    xsx_1 = 1.0 / (xs * ovm)
+    xs = obs_vals.T * SigInv
+    xsx_1 = 1.0 / (xs * obs_vals)
     
     # run the kriging estimator for each model grid point
     K = np.zeros_like(mlats)
@@ -151,12 +167,12 @@ def universal_kriging_data_to_model(obs_data, obs_stds, mu_mod, wrf_data, mod_st
             cc = max(0.8565 - 0.0063 * great_circle_distance(mlons[p], mlats[p], lon, lat), 0.0)
             cov[k,0] = mod_stds[p] * cc * obs_stds[k]
         
-        csi = SigInv * (cov - ovm * xsx_1 * (xs * cov - mu_mod[p]))
-        K[p] = csi.T * ovm
-	tmp = (mu_mod[p] - cov.T * SigInv * ovm)
+        csi = SigInv * (cov - obs_vals * xsx_1 * (xs * cov - mu_mod[p]))
+        K[p] = csi.T * obs_vals
+	tmp = (mu_mod[p] - cov.T * SigInv * obs_vals)
         V[p] = mod_stds[p]**2 - cov.T * SigInv * cov + tmp * xsx_1 * tmp
 
-    return K, V
+    return K, V, gamma, mape
 
 
 

@@ -208,8 +208,16 @@ def run_module():
 
                 # krige data to observations
                 if cfg['kriging_strategy'] == 'uk':
-                    Kf_fn, Vf_fn = universal_kriging_data_to_model(obs_data[model_time], obs_re.get_variance() ** 0.5,
-                                                                   predicted_field, wrf_data, mresV ** 0.5, t)
+                    Kf_fn, Vf_fn, gamma, mape = universal_kriging_data_to_model(obs_data[model_time],
+                                                                          obs_re.get_variance() ** 0.5,
+                                                                          base_field,
+                                                                          wrf_data,
+                                                                          mresV ** 0.5, t)
+                    # replace the stored gamma with the uk computed gamma
+                    diagnostics().pull("mfm_gamma")[-1] = gamma
+                    diagnostics().pull("mfm_mape")[-1] = mape
+                    print("uk: replaced mfm_gamma %g, mfm_mape %g" % (gamma, mape))
+
                 elif cfg['kriging_strategy'] == 'tsm':
                     Kf_fn, Vf_fn = trend_surface_model_kriging(obs_data[model_time], wrf_data, predicted_field)
                 else:
