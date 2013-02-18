@@ -235,11 +235,6 @@ def run_module():
                 Vf.append(Vf_fn)
                 fn.append(fuel_ndx)
 
-#            else:
-#
-                # plot the behavior of the model outside of observations
-#                plot_model_snapshot(cfg, tm, t, fuel_ndx, None, None, mod_vals, mod_na_vals)
-                
 
         # if there were any observations, run the kalman update step
         if len(fn) > 0:
