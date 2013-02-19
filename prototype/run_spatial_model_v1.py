@@ -199,11 +199,7 @@ def run_module():
                 obs_re.update_with(obs_vals - mod_vals)
                 diagnostics().push("kriging_obs_res_var", (t, np.mean(obs_re.get_variance())))
             
-                # predict the moisture field using observed fuel type
-                predicted_field = mfm.predict_field(base_field)
-
-                # update the model residual estimator and get current best estimate of variance
-                mod_re.update_with(f[:,:,fuel_ndx] - predicted_field)
+                # retrieve the variance of the model field
                 mresV = mod_re.get_variance()
 
                 # krige data to observations
@@ -218,8 +214,19 @@ def run_module():
                     diagnostics().pull("mfm_mape")[-1] = mape
                     print("uk: replaced mfm_gamma %g, mfm_mape %g" % (gamma, mape))
 
+                    # update the residuals estimator with the current
+                    mod_re.update_with(gamma * f[:,:,fuel_ndx] - Kf_fn)
+
                 elif cfg['kriging_strategy'] == 'tsm':
+                    # predict the moisture field using observed fuel type
+                    predicted_field = mfm.predict_field(base_field)
+
+                    # run the tsm kriging estimator
                     Kf_fn, Vf_fn = trend_surface_model_kriging(obs_data[model_time], wrf_data, predicted_field)
+
+                    # update the model residual estimator and get current best estimate of variance
+                    mod_re.update_with(f[:,:,fuel_ndx] - predicted_field)
+
                 else:
                     raise ValueError('Invalid kriging strategy [%s] in configuration.' % cfg['kriiging_strategy'])
 

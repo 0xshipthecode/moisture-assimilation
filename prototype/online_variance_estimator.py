@@ -30,7 +30,7 @@ class OnlineVarianceEstimator:
         """
         Return the current variance estimate.
         """
-        return self.M2 / (self.N - 1)
+        return self.M2 / max(self.N - 1, 1)
     
 
     def get_mean(self):
