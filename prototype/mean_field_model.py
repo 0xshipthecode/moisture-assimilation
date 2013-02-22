@@ -21,31 +21,40 @@ class MeanFieldModel:
         diagnostics().configure_tag("mfm_mape", True, True, True)
     
     
-    def fit_to_data(self, E, obs_list):
+    def fit_to_data(self, covar, obs, Sigma):
         """
-        Fit the model to the observations.  Computes a weighted least squares
-        estimate of the observed data.
+        Fit the covariates to the observations using a general least squares
+        approach that works for universal kriging (general covariane)
+        and for trend surface modelling (diagonal covariance).
+
+        The covariates must already correspond to observation locations.
+
+        Sigma is the covariance matrix of the errors.
         """
-        # gather observation data and corresponding model data        
-        grid_pts = [obs.get_nearest_grid_point() for obs in obs_list]
-        obsv = np.array([obs.get_value() for obs in obs_list])
-        modv = np.array([E[pos] for pos in grid_pts])
-        weights = np.array([1.0 for obs in obs_list])
+
+        # gather observation data and corresponding model data     
+        # FIXME: doing an inverse here instead of a linear solve as I am lazy
+        # and I know that matrix is well conditioned
+        XtW = np.dot(covar.T, Sigma)
+        XtWX_1 = np.linalg.inv(np.dot(XtW, covar))
     
         # compute the weighted regression
-        gamma = np.sum(weights * modv * obsv) / np.sum(weights * modv ** 2)
-        diagnostics().push("mfm_res_avg", np.mean(obsv - gamma * modv))
+        gamma = np.dot(XtWX_1, np.dot(XtW, obs))
+
+        # push diagnostics out
+        diagnostics().push("mfm_res_avg", np.mean(obs - gamma * covar))
         diagnostics().push("mfm_gamma", gamma)
-        diagnostics().push("mfm_mape", np.mean(np.abs(obsv - gamma * modv)))
+        diagnostics().push("mfm_mape", np.mean(np.abs(obs - gamma * covar)))
         
         # if the gamma is not locked, then store the new best fit
         if not self.lock_gamma:
             self.gamma = gamma
             
 
-    def predict_field(self, E):
+    def predict_field(self, Covar):
         """
-        Return the predicted field given the fit.
+        Return the predicted field given the fit gamma vector.
+        The covariates passed must be 3D (lon x lat x covar_id).
         """
-        return self.gamma * E
+        return np.sum(self.gamma[np.newaxis, np.newaxis,:] * Covar, axis = 3)
         

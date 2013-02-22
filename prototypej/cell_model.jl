@@ -1,6 +1,6 @@
 
 #
-# This file contains a Julia version of the cell model dynamics except for the equilibrium computation.
+# Single cell dynamics of the fuel moisture model including the Kalman predict/update mechanisms.
 # 
 #
 
@@ -42,12 +42,12 @@ function advance_model(c::CellModel, Ed::Float64, Ew::Float64,
     Ed += dE
     Ew += dE
 
-    # equilibria
+    # compute equilibria
     equi = copy(m)
     rlag = zeros(k)
     model_ids = zeros(Int32, k)
     
-    # switch between models
+    # switch between models, first branch is rain model, rest are for no-rain conditions
     if r > c.r0
         equi[:] = c.S + dS
         model_ids[:] = 3
@@ -56,9 +56,11 @@ function advance_model(c::CellModel, Ed::Float64, Ew::Float64,
     else
         model_ids[:] = 4
         for i in [1:k]
+            # drying model
             if equi[i] > Ed
                 model_ids[i] = 1
                 equi[i] = Ed
+            # wetting model
             elseif equi[i] < Ew
                 model_ids[i] = 2
                 equi[i] = Ew
@@ -135,20 +137,4 @@ function kalman_update(c::CellModel, O::Vector{Float64},
     c.m_ext += K * (O - c.m_ext[fuel_types])
     c.P -= K * H * P
 
-end
-
-
-# test code
-ca = Array(CellModel, 10000)
-for i in [1:10000]
-    ca[i] = CellModel((i, i), 3, [0.03, 0.03, 0.03], eye(9) * 0.001, [1.0, 10.0, 100.0])
-end
-
-Q = eye(9) * 0.001
-for s in [1:20]
-    println("Advancing step $s ...")
-    for i in [1:10000]
-        advance_model(ca[i], 0.05, 0.05, 0.0, 10.0 * 60, Q)
-        kalman_update(ca[i], [0.03,0.03], [0.01 0.00; 0.00 0.01], [1,2])
-    end
 end

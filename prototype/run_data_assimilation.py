@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun Oct 28 18:14:36 2012
+Created on Thu Feb 21 14:00:03
+
+A more general application that 
+1. loads up a configuration file,
+2. obtains data from a WRF model,
+3. reads in observations and metadata for a list of stations,
+4. runs the moisture model and the assimilation mechanism.
 
 @author: martin
 """
@@ -8,7 +14,7 @@ Created on Sun Oct 28 18:14:36 2012
 from spatial_model_utilities import render_spatial_field_fast, great_circle_distance
 from time_series_utilities import build_observation_data
 
-from kriging_methods import trend_surface_model_kriging
+from kriging_methods import trend_surface_model_kriging, universal_kriging_data_to_model
 
 from wrf_model_data import WRFModelData
 from cell_model_opt import CellMoistureModel
@@ -203,6 +209,7 @@ def run_module():
 
                 # retrieve observations for current time
                 obs_t = obs_data[model_time]
+
 
                 # fit the current estimation of the moisture field to the data 
                 base_field = f[:,:,fuel_ndx]
