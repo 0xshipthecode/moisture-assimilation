@@ -2,9 +2,6 @@ module stations
 
 using Calendar
 
-type Location
-    lat, lon::Float64
-end
 
 
 type Station
@@ -20,8 +17,8 @@ type Station
     # list of observed variable names
     observed_vars::Array{String}
 
-    # variance of observed variables
-    var_variance::Array{Float64}
+    # variance of observed variables (measurements)
+    m_variance::Array{Float64}
 end
 
 
@@ -30,7 +27,7 @@ type Observation
     station::Station
 
     # observation time
-    tm::
+    tm::Calendar.CalendarTime
 
     # observed value
     value::Float64

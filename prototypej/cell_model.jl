@@ -1,4 +1,3 @@
-
 #
 # Single cell dynamics of the fuel moisture model including the Kalman predict/update mechanisms.
 # 
