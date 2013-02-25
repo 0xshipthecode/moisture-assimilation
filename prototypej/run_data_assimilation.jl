@@ -1,4 +1,4 @@
-
+#!julia
 
 #
 #  This is the main file for data assimilation runs.
@@ -18,6 +18,12 @@ using Storage
 function main(args)
 
     # the arguments passed to the julia program do not include program name
+    if length(args) != 1
+        println("Usage: julia run_data_assimilation.jl cfg_file")
+        exit(1)
+    end
+
+    
     cfg = evalfile(args[1])
 
 end

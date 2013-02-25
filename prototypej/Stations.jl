@@ -105,7 +105,9 @@ function observations(s::Station, obs_type::String, tm::Array{CalendarTime})
     i, j = 1, 1
     while (i <= length(tm)) && (j <= length(obst))
         if tm[i] == obst[j]
-            obs[tm[i]] = Observation(s, tm[i], obsv[i], obs_type, variance)
+            if !isnan(obsv[i])
+                obs[tm[i]] = Observation(s, tm[i], obsv[i], obs_type, variance)
+            end
             i += 1
             j += 1
         elseif tm[i] > obst[j]
@@ -199,10 +201,6 @@ function load_station_data(s::Station, fname::String)
     return s
 
 end
-
-
-
-
 
 
 function readline_skip_comments(io :: IO)
