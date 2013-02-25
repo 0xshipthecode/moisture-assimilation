@@ -12,6 +12,10 @@
 #
 
 using Storage
+using Kriging
+using WRF
+using FM
+
 
 
 
@@ -22,9 +26,25 @@ function main(args)
         println("Usage: julia run_data_assimilation.jl cfg_file")
         exit(1)
     end
-
     
     cfg = evalfile(args[1])
+
+    # configure Storage mechanism
+    Storage.sopen(cfg["output_dir"], "moisture_model_v2_diagnostics.txt", "frame")
+
+    # Storage tags
+    Storage.setup_tag("assim_K0", false, true, true)
+    Storage.setup_tag("assim_K1", true, true, true)
+    Storage.setup_tag("assim_data", false, false, true)
+
+    Storage.setup_tag("obs_residual_var", true, true, true)
+
+    Storage.setup_tag("fm10_model_residual_var", true, true, true)
+    Storage.setup_tag("fm10_model_var", false, true, true)
+    Storage.setup_tag("fm10_kriging_var", false, true, true)
+
+    #read in data from the WRF output file pointed to by cfg
+    
 
 end
 

@@ -1,9 +1,11 @@
+module FM
+
 #
 # Single cell dynamics of the fuel moisture model including the Kalman predict/update mechanisms.
 # 
 #
 
-type CellModel
+type FMModel
     k::Int
     m_ext::Vector{Float64}
     P::Matrix{Float64}
@@ -14,7 +16,7 @@ type CellModel
     S::Float64
     latlon::Tuple
 
-    function CellModel(latlon, k, m0, P0, Tk)
+    function FMModel(latlon, k, m0, P0, Tk)
         # construct initial state
         m_ext = zeros(2*k+3)
         m_ext[1:k] = m0
@@ -26,7 +28,7 @@ type CellModel
 end
 
 
-function advance_model(c::CellModel, Ed::Float64, Ew::Float64,
+function advance_model(c::FMModel, Ed::Float64, Ew::Float64,
                        r::Float64, dt::Float64, Q::Matrix{Float64})
 
     # acquire local variables
@@ -115,7 +117,7 @@ function advance_model(c::CellModel, Ed::Float64, Ew::Float64,
 end
 
 
-function kalman_update(c::CellModel, O::Vector{Float64},
+function kalman_update(c::FMModel, O::Vector{Float64},
                        V::Matrix{Float64}, fuel_types::Vector{Int})
     k = c.k
     P = c.P
@@ -135,5 +137,8 @@ function kalman_update(c::CellModel, O::Vector{Float64},
     # update the state
     c.m_ext += K * (O - c.m_ext[fuel_types])
     c.P -= K * H * P
+
+end
+
 
 end
