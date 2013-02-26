@@ -1,4 +1,4 @@
-#!julia
+#!/usr/bin/env julia
 
 #
 #  This is the main file for data assimilation runs.
