@@ -104,7 +104,7 @@ function flush_frame()
 end
 
 
-function push(tag :: String, data)
+function spush(tag :: String, data)
     c = sm.tag_cfg[tag]
     sm.current_frame[tag] = data
 

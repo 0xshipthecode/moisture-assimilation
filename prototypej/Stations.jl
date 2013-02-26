@@ -204,6 +204,26 @@ function load_station_data(s::Station, fname::String)
 end
 
 
+function build_observation_data(ss::Array{Station}, obs_type::String)
+
+    Ns = length(ss)
+    obs = Observation[]
+    
+    # observation data
+    for s in ss
+        append!(obs, observations(s, obs_type))
+    end
+
+    # repackage into a time-indexed structure
+    obs_data = Dict{CalendarTime,Observation}()
+    for o in obs
+        if has(obs_data, o.tm) push!(obs_data[o.tm], o) else obs_data[o.tm] = [o] end
+    end
+
+    return obs_data
+end
+
+
 function readline_skip_comments(io :: IO)
     s = "#"
     while length(s) == 0 || s[1] == '#'
@@ -211,7 +231,6 @@ function readline_skip_comments(io :: IO)
     end
     return s
 end
-
 
 
 end

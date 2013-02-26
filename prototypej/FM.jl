@@ -22,7 +22,7 @@ type FMModel
         m_ext[1:k] = m0
 
         # initialize with defaults
-        new(k, m_ext, P0, Tk * 3600, 14.0 * 3600, 5.0, 8.0, 2.5, latlon)
+        new(k, m_ext, copy(P0), Tk * 3600, 14.0 * 3600, 5.0, 8.0, 2.5, latlon)
     end
 
 end

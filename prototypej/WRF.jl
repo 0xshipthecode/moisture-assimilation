@@ -51,8 +51,8 @@ function load_wrf_data(file_path::String)
     end
 
     # read in grid dimensions
-    w.fields["lon"] = netcdf.ncread(file_path, "XLONG")
-    w.fields["lat"] = netcdf.ncread(file_path, "XLAT")
+    w.fields["lon"] = squeeze(netcdf.ncread(file_path, "XLONG")[1,:,:], 1)
+    w.fields["lat"] = squeeze(netcdf.ncread(file_path, "XLAT")[1,:,:], 1)
 
     # compute derived variables
     compute_rainfall_per_hour(w)
