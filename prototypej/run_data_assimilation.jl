@@ -68,7 +68,7 @@ function main(args)
 
     # retrieve equilibria and rain
     Ed, Ew = WRF.field(w, "Ed"), WRF.field(w, "Ew")
-    rain = WRF.field("RAIN")
+    rain = WRF.field(w, "RAIN")
 
     ### Load observation data from stations
     io = open(join([cfg["station_data_dir"], cfg["station_list_file"]], "/"), "r")
