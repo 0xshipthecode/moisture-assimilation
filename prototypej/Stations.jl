@@ -35,9 +35,12 @@ type Station
     # variance of observed variables (measurements)
     obs_vars::Dict{String,Float64}
 
-    Station() = new("", "", GeoLoc(0.0,0.0), 0.0, {}, Dict{String,Array{Float64}}(), Dict{String,Float64}())
+    # available observation types from the station
+    sensor_types :: Array{String}
 
-    Station(id, name, loc, elevation) = new(id, name, loc, elevation, {}, Dict{String,Array{Float64}}(), Dict{String,Float64}())
+    Station() = new("", "", GeoLoc(0.0, 0.0), 0.0, {}, Dict{String,Array{Float64}}(), Dict{String,Float64}(), Array(String,0))
+
+    Station(id, name, loc, elevation) = new(id, name, loc, elevation, {}, Dict{String,Array{Float64}}(), Dict{String,Float64}(), Array(String,0))
 
 end
 
@@ -146,29 +149,21 @@ function load_station_info(fname :: String)
     # read elevation
     s.elevation = float(strip(readline_skip_comments(io)))
 
-    # read observation types (names)
-    var_list = map(x -> strip(x), split(readline_skip_comments(io), ","))
-    nvars = length(var_list)
-
-    # read observation variances
-    obs_vars = map(x -> float(strip(x)), split(readline_skip_comments(io), ","))
+    # read all observation types acquired by the station
+    s.sensor_types = map(x -> strip(x), split(readline_skip_comments(io), ","))
+    nvars = length(s.sensor_types)
 
     # create var time series containers
-    val_lists = Array(Any, 0)
-    i = 1
-    for v in var_list
-        l = Array(Float64, 0)
-        s.observations[v] = l
-        push!(val_lists, l)
-        s.obs_vars[v] = obs_vars[i]
-        i += 1
+    for v in s.sensor_types
+        s.observations[v] = Array(Float64, 0)
     end
 
-    # close file
+    # close the info file
     close(io)
 
     return s
 end
+
 
 
 function load_station_data(s::Station, fname::String)
@@ -176,21 +171,27 @@ function load_station_data(s::Station, fname::String)
     # open file
     io = open(fname, "r")
 
-    # read observation types (names) to get order right in case it changed
+    # read in observations stored in file
     var_list = map(x -> strip(x), split(readline_skip_comments(io), ","))
 
+    # read observation variances
+    obs_vars = map(x -> float(strip(x)), split(readline_skip_comments(io), ","))
+
     val_lists = Array(Any, 0)
+    i = 1
     for v in var_list
         push!(val_lists, s.observations[v])
+        s.obs_vars[v] = obs_vars[i]
+        i += 1
     end
 
-    # read observations, time is first, then one value per measurement or nan if not available
+    # read observations, time is first (and in GMT), then one value per measurement or nan if not available
     while !eof(io)
 
         vals = map(x -> strip(x), split(readline_skip_comments(io), ","))
-        push!(s.obs_times, Calendar.parse("%Y-%M-%d %h:%m %z", vals[1]))
+        push!(s.obs_times, Calendar.parse("%Y-%M-%d %h:%m", vals[1], "GMT"))
         for i in 1:length(val_lists)
-            push!(val_lists[i], float(vals[i+1]))
+            push!(val_lists[i], length(vals[i+1])>0?float(vals[i+1]):nan(1.0))
         end
 
     end

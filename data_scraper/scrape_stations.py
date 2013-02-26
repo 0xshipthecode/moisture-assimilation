@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from bs4 import BeautifulSoup
 import sys
 import urllib
@@ -76,6 +78,7 @@ def get_station_info(station_info):
     station_info['lon'] = float(d['LONGITUDE'])
     station_info['wims'] = d['WIMS ID']
     station_info['mnet'] = d['MNET']
+    station_info['name'] = d['NAME']
 	   
 
 def observes_variables(station_info, req_vars):
@@ -192,8 +195,16 @@ if __name__ == '__main__':
         si = { 'code' : args.station_code }
         get_station_info(si)
         if args.info_fmt == 'loose':
-            for k,v in si.iteritems():
-                print(k + '=' + str(v))
+            print("# Info created by scrape_stations.py")
+            print(args.station_code)
+            print("# Station name")
+            print(string.strip(si['name']))
+            print("# Station geo location")
+            print("%g, %g" % (si['lat'], si['lon']))
+            print("# Elevation (meters)")
+            print("%g" % si['elevation'])
+            print("# Station sensors")
+            print(string.join(si['vlist'], ", "))
         else:
             print(si['code'] + ',' + str(si['lat']) + ',' + str(si['lon']) + ',' + str(si['elevation']))
 
