@@ -75,18 +75,17 @@ function main(args)
     station_ids = map(x -> strip(x), readlines(io))
     close(io)
 
-    # load each station from its info file
+    # load each station from its info and observation files
     stations = {Station}[]
     for sid in station_ids
         s = Station(sid)
         load_station_info(s, join([cfg["station_data_dir"], string(sid, ".info")], "/"))
-        #FIXME: should add loading of arbitrary sets of data
-        load_station_data(s, join([cfg["station_data_dir"], string(sid, ".csv")], "/"))
+        load_station_data(s, join([cfg["station_data_dir"], string(sid, ".obs")], "/"))
         push!(stations, s)
     end
 
     # build the observation data from stations
-    obs_fm10 = build_observation_data(stations, "fm10")
+    obs_fm10 = build_observation_data(stations, "FM")
 
     ### Initialize model
 
@@ -116,6 +115,7 @@ function main(args)
     models = [ FMModel((lat[x,y], lon[x,y]), 3, E[x,y], P0, Tk) for x=1:dom_shape[1], y=1:dom_shape[2] ]
     models_na = [ FMModel((lat[x,y], lon[x,y]), 3, E[x,y], P0, Tk) for x=1:dom_shape[1], y=1:dom_shape[2] ]
 
+    print("Done")
     
 end
 

@@ -11,7 +11,8 @@ from datetime import datetime
 skip_vars = [ 'QFLG' ]
 process_vars = { 'FM' : lambda x: 0.01 * x,  # fuel moisture comes in gm water /100 gm pine wood
                  'TMPF' : lambda x: 273.15 + x,  # we actually download TMPF in degrees C in the scraper
-                 'RELH' : lambda x : 0.01 * x  # relative humidity comes in percent
+                 'RELH' : lambda x : 0.01 * x,  # relative humidity comes in percent
+                 'SKNT' : lambda x : 273.15 + x # skin temperature is also in deg C
                }
 
 
@@ -53,7 +54,7 @@ def load_station_data(station_file):
                 val = process_vars[var_ord[j]](float(s.cell_value(i,cell_ord[j])))
                 obs_i.append((var_ord[j], val))
             except ValueError:
-                obs_i.append((var_ord[j], float('nan')))
+                pass
 
         obs[tstamp] = obs_i
 
@@ -70,7 +71,7 @@ if __name__ == "__main__":
 
     # read in station codes
     with open(sys.argv[1], "r") as f:
-        sids = filter(lambda x: len(x) > 0, map(string.strip, f.readlines()))
+        sids = filter(lambda x: len(x) > 0 and x[0] != '#', map(string.strip, f.readlines()))
 
     # read in standard observation variances
     with open(sys.argv[2], "r") as f:
@@ -96,9 +97,8 @@ if __name__ == "__main__":
             f.write("# Data file generated on %s by extract_observations.py\n" % str(datetime.now()))
             f.write("# Format is time, observed_vars, observations, variances\n")
             for tm in sorted(obs.keys()):
-                obs_i = obs[tm]
-                var_list = [x[0] for x in obs_i]
-                obs_list = [x[1] for x in obs_i]
+                # remove unavailable measurments
+                var_list, obs_list = zip(*obs[tm])
                 obs_var = [ obs_var_tbl[x] if x in obs_var_tbl else float("nan") for x in var_list ]
                 f.write(tm.strftime('%Y-%m-%d_%H:%M'))
                 f.write('\n')

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-STATIONS=`cat $1`
+STATIONS=`grep -v "^#" $1`
 
 for S in $STATIONS ;
 do

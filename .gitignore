@@ -9,6 +9,7 @@
 # Ignore observation and info files
 *.obs
 *.info
+*.xls
 # Ignore auxiliary directories
 spatial_field_model/
 prototype/model_outputs*/

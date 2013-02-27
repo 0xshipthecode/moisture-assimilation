@@ -7,6 +7,7 @@ import time
 import argparse
 from datetime import datetime
 import string
+import os
 
 # mesowest list of stations
 mesowest_station_url = 'http://mesowest.utah.edu/cgi-bin/droman/download_ndb.cgi?stn=%s'
@@ -15,7 +16,11 @@ mesowest_dl_url = 'http://mesowest.utah.edu/cgi-bin/droman/meso_download_mesowes
 mesowest_station_pos = 'http://mesowest.utah.edu/cgi-bin/droman/side_mesowest.cgi?stn=%s'
 
 # format of timestamp
-tstmp_fmt = '%Y-%m-%d_%H:%M'
+tstamp_fmt = '%Y-%m-%d_%H:%M'
+
+# renaming dictionary handling differences between variable names in xls files from Mesowest
+# and in the variable listing
+renames = { 'TMPF' : 'TMP', 'DWPF' : 'DWP' }
 
 
 def retrieve_web_page(addr):
@@ -171,7 +176,7 @@ def download_station_data(station_info, out_fmt, tstmp, length_hrs, vlist = None
 
 
 def parse_dt(dt):
-    tstmp = datetime.strptime(dt, tstmp_fmt)
+    tstmp = datetime.strptime(dt, tstamp_fmt)
     return tstmp
 
 if __name__ == '__main__':
@@ -209,7 +214,8 @@ if __name__ == '__main__':
             print("# Elevation (meters)")
             print("%g" % si['elevation'])
             print("# Station sensors")
-            print(string.join(si['vlist'], ", "))
+            nnv = [ renames[x] if x in renames else x for x in si['vlist'] ]
+            print(string.join(nnv, ", "))
         else:
             print(si['code'] + ',' + str(si['lat']) + ',' + str(si['lon']) + ',' + str(si['elevation']))
 
@@ -218,10 +224,7 @@ if __name__ == '__main__':
         get_station_info(station_info)
         doc = download_station_data(station_info, args.fmt, args.tstamp, args.hours, args.vlist)
         
-        ndx = 1
-        while os.path.exists("%s_%d.%s" % (args.station_code, ndx, args.fmt)):
-            ndx += 1
-        with open('%s_%d.%s' % (args.station_code, ndx, args.fmt), 'w') as f:
+        with open('%s_%s.%s' % (args.station_code, args.tstamp.strftime(tstamp_fmt), args.fmt), 'w') as f:
             f.write(doc)
     else:
         sys.exit(1)
