@@ -8,12 +8,14 @@ import argparse
 from datetime import datetime
 import string
 
-
 # mesowest list of stations
 mesowest_station_url = 'http://mesowest.utah.edu/cgi-bin/droman/download_ndb.cgi?stn=%s'
 mesowest_net_url = 'http://mesowest.utah.edu/cgi-bin/droman/stn_mnet.cgi?mnet=%d'
 mesowest_dl_url = 'http://mesowest.utah.edu/cgi-bin/droman/meso_download_mesowest_ndb.cgi'
 mesowest_station_pos = 'http://mesowest.utah.edu/cgi-bin/droman/side_mesowest.cgi?stn=%s'
+
+# format of timestamp
+tstmp_fmt = '%Y-%m-%d_%H:%M'
 
 
 def retrieve_web_page(addr):
@@ -43,13 +45,13 @@ def extract_stations(table):
     	if len(cells) == 5:
 	        # we have five cells, retrieve the text and add to list
             val = [ c.getText() for c in cells ]
-    	    stations.append({key: value for (key, value) in zip(name,val)})
+    	    stations.append(dict(zip(name,val)))
 
     	if len(cells) == 6:
     	    # we have six cells, second is WIMS id, we throw that out
             val = [ c.getText() for c in cells ]
             del val[1]
-    	    stations.append({key: value for (key, value) in zip(name,val)})
+            stations.append(dict(zip(name,val)))
 	
     return stations
 
@@ -71,8 +73,7 @@ def get_station_info(station_info):
     p = retrieve_web_page(mesowest_station_pos % station_info['code'])
     soup = BeautifulSoup(p)
     data = filter(lambda x: x.find(':') > 0, map(string.strip, soup.div.getText().split('\n')))
-    pairs = [ s.split(':') for s in data ]
-    d = { p[0] : p[1] for p in pairs }
+    d = dict([ s.split(':') for s in data ])
     station_info['elevation'] = int(d['ELEVATION'][:-3]) * 0.3048
     station_info['lat'] = float(d['LATITUDE'])
     station_info['lon'] = float(d['LONGITUDE'])
@@ -89,8 +90,9 @@ def observes_variables(station_info, req_vars):
     if station_info.has_key('vlist'):
         vlist = station_info['vlist']
     else:
-        vlist = get_station_info(station_info)
-        print('# vars for %s : %s' % (station_info['code'], str(station_info['vlist'])))
+        get_station_info(station_info)
+        vlist = station_info['vlist']
+#        print('# vars for %s : %s' % (station_info['code'], str(station_info['vlist'])))
         time.sleep(0.1)
 
     return all([v in vlist for v in req_vars])
@@ -120,10 +122,13 @@ def find_and_list_stations(args):
         stations = filter(lambda x: x['state'] == args.state, stations)
         print('# stations in %s : %d' % (args.state, len(stations)))
 
+    # only report active stations
+    stations = filter(lambda x: x['status'] == 'ACTIVE', stations)
+    print('# ACTIVE stations : %d' % len(stations))
+
     # if requested, filter by variables
     if args.vlist is not None:
         stations = filter(lambda x: observes_variables(x, args.vlist), stations)
-        time.sleep(0.1)
         print('# stations yielding %s: %d' % (str(args.vlist), len(stations)))
 
     return stations
@@ -166,7 +171,7 @@ def download_station_data(station_info, out_fmt, tstmp, length_hrs, vlist = None
 
 
 def parse_dt(dt):
-    tstmp = datetime.strptime(dt, '%Y/%m/%d.%H:%M')
+    tstmp = datetime.strptime(dt, tstmp_fmt)
     return tstmp
 
 if __name__ == '__main__':
@@ -178,7 +183,7 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--state', metavar='S', type=str, dest='state', help='only return stations from a particular state (use state code), list command only')
     parser.add_argument('-v', '--vlist', metavar='V', type=str, dest='vlist', default=None, help='(dl/list) download the var(s) from a station if command is dl or list stations which provide var(s) if list; separate variables by a comma, no spaces')
     parser.add_argument('-i', '--interval', metavar='H', type=int, dest='hours', help='the timespan for which to download measurements (number of hours, dl only)')
-    parser.add_argument('-t', '--tstamp', metavar='T', type=parse_dt, dest='tstamp', help='end date/time for the downloaded range, dl only')
+    parser.add_argument('-t', '--tstamp', metavar='T', type=parse_dt, dest='tstamp', help='end date/time for the downloaded range, dl only (fmt=Y-m-d_H:M)')
     parser.add_argument('-f', '--fmt', metavar='M', type=str, default='xls', dest='fmt', help='(dl only) download in what format? (xls/csv/xml)')
     parser.add_argument('-l', '--line', action='store_const', const='terse', default='loose', dest='info_fmt', help='(info only) print information in terse format')
     
@@ -195,7 +200,7 @@ if __name__ == '__main__':
         si = { 'code' : args.station_code }
         get_station_info(si)
         if args.info_fmt == 'loose':
-            print("# Info created by scrape_stations.py")
+            print("# Info created by scrape_stations.py on %s" % str(datetime.now()))
             print(args.station_code)
             print("# Station name")
             print(string.strip(si['name']))
@@ -212,7 +217,11 @@ if __name__ == '__main__':
         station_info = { 'code' : args.station_code }
         get_station_info(station_info)
         doc = download_station_data(station_info, args.fmt, args.tstamp, args.hours, args.vlist)
-        with open('%s.%s' % (args.station_code, args.fmt), 'w') as f:
+        
+        ndx = 1
+        while os.path.exists("%s_%d.%s" % (args.station_code, ndx, args.fmt)):
+            ndx += 1
+        with open('%s_%d.%s' % (args.station_code, ndx, args.fmt), 'w') as f:
             f.write(doc)
     else:
         sys.exit(1)

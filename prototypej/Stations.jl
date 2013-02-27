@@ -189,7 +189,7 @@ function load_station_data(s::Station, fname::String)
     while !eof(io)
 
         vals = map(x -> strip(x), split(readline_skip_comments(io), ","))
-        push!(s.obs_times, Calendar.parse("%Y-%M-%d %h:%m", vals[1], "GMT"))
+        push!(s.obs_times, Calendar.parse("%Y-%M-%d_%h:%m", vals[1], "GMT"))
         for i in 1:length(val_lists)
             push!(val_lists[i], length(vals[i+1])>0?float(vals[i+1]):nan(1.0))
         end

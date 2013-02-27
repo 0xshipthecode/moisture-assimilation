@@ -6,6 +6,9 @@
 *.so
 # Ignore html files
 *.html
+# Ignore observation and info files
+*.obs
+*.info
 # Ignore auxiliary directories
 spatial_field_model/
 prototype/model_outputs*/
