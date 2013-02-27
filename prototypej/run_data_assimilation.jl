@@ -98,7 +98,7 @@ function main(args)
     Q = eye(9) * cfg["Q"]
     P0 = eye(9) * cfg["P0"]
     dt = (wtm[2] - wtm[1]).millis / 1000
-    println("INFO: time step from WRF is $dt.")
+    println("INFO: time step from WRF is $dt s.")
     K = zeros(Float64, dom_shape)
     V = zeros(Float64, dom_shape)
     mV = zeros(Float64, dom_shape)
@@ -114,7 +114,7 @@ function main(args)
     models = [ FMModel((lat[x,y], lon[x,y]), 3, E[x,y], P0, Tk) for x=1:dom_shape[1], y=1:dom_shape[2] ]
     models_na = [ FMModel((lat[x,y], lon[x,y]), 3, E[x,y], P0, Tk) for x=1:dom_shape[1], y=1:dom_shape[2] ]
 
-    print("Done")
+    println("Done")
     
 end
 
