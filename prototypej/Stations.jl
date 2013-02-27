@@ -166,7 +166,7 @@ function load_station_data(s::Station, fname::String)
 
         # read the date
         tm_str = strip(readline_skip_comments(io))
-        tm = Calendar.parse("%Y-%M-%d_%H:%m", tm_str, "GMT")
+        tm = Calendar.parse("yyyy-MM-dd_HH:mm", tm_str, "GMT")
 
         # read in observed variables
         variables = map(x -> strip(x), split(readline_skip_comments(io), ","))

@@ -72,14 +72,13 @@ function main(args)
 
     ### Load observation data from stations
     io = open(join([cfg["station_data_dir"], cfg["station_list_file"]], "/"), "r")
-    station_ids = map(x -> strip(x), readlines(io))
+    station_ids = filter(x -> x[1] != '#', map(x -> strip(x), readlines(io)))
     close(io)
 
     # load each station from its info and observation files
-    stations = {Station}[]
+    stations = Station[]
     for sid in station_ids
-        s = Station(sid)
-        load_station_info(s, join([cfg["station_data_dir"], string(sid, ".info")], "/"))
+        s = load_station_info(join([cfg["station_data_dir"], string(sid, ".info")], "/"))
         load_station_data(s, join([cfg["station_data_dir"], string(sid, ".obs")], "/"))
         push!(stations, s)
     end
