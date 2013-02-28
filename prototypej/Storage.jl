@@ -38,7 +38,7 @@ type StorageManager
 
     log_io
 
-    StorageManager(out_dir, log_name, frame_prefix) = new(out_dir, log_name, frame_prefix, Dict{String,Any}(), Dict{String,Any}(), 1, true, Dict{String,Any}(), nothing)
+    StorageManager(out_dir, log_name, frame_prefix) = new(out_dir, log_name, frame_prefix, Dict{String,Any}(), Dict{String,Any}(), 1, false, Dict{String,Any}(), nothing)
 end
 
 
@@ -141,9 +141,11 @@ end
 
 function python_render_item(io::IO, k::String, v::Array)
     show(io, k)
-    print(io, " : [")
+    print(io, " : ")
 
     # construct to avoid "," after last item in list
+    s = size(v)
+    print(io, length(s) > 1 ? "np.reshape([" : "[")
     if length(v) > 0
         show(io, v[1])
         for i in v[2:]
@@ -151,7 +153,7 @@ function python_render_item(io::IO, k::String, v::Array)
             show(io, i)
         end
     end
-    print(io, "]")
+    println(io, length(s) > 1 ? "], $s, order = 'F')" : "]")
 end
 
 
