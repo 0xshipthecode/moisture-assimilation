@@ -29,14 +29,21 @@ end
 
 
 
-function load_wrf_data(file_path::String)
+function load_wrf_data(file_path::String, var_list::Array{ASCIIString})
 
     w = WRFData(file_path)
     w.file_path = file_path
 
     nc_file = netcdf.open(file_path)
 
-    for v in ["T2", "Q2", "PSFC", "RAINC", "RAINNC"]
+    vl = Array(ASCIIString, 0)
+    def_var_list = ["T2", "Q2", "PSFC", "RAINC", "RAINNC"]
+    if var_list != nothing
+       append!(vl, var_list)
+    end	
+    append!(vl, def_var_list)
+
+    for v in vl
         w.fields[v] = netcdf.ncread(file_path, v)
     end
 

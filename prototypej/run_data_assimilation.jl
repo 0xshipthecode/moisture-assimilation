@@ -26,8 +26,10 @@ using Kriging
 using WRF
 
 using FM
-import FM.FMModel
+import FM.FMModel, FM.advance_model
 
+using LSq
+import LSq.estimate_ols
 
 
 function main(args)
@@ -59,7 +61,7 @@ function main(args)
     ### Load WRF output data
 
     # read in data from the WRF output file pointed to by cfg
-    w = WRF.load_wrf_data(cfg["wrf_output"])
+    w = WRF.load_wrf_data(cfg["wrf_output"], ["ZSF"])
 
     # extract WRF fields
     lat, lon = WRF.lat(w), WRF.lon(w)
@@ -69,6 +71,7 @@ function main(args)
     # retrieve equilibria and rain
     Ed, Ew = WRF.field(w, "Ed"), WRF.field(w, "Ew")
     rain = WRF.field(w, "RAIN")
+    zsf = WRF.field(w, "ZSF")
 
     ### Load observation data from stations
     io = open(join([cfg["station_data_dir"], cfg["station_list_file"]], "/"), "r")
@@ -114,8 +117,20 @@ function main(args)
     models = [ FMModel((lat[x,y], lon[x,y]), 3, E[x,y], P0, Tk) for x=1:dom_shape[1], y=1:dom_shape[2] ]
     models_na = [ FMModel((lat[x,y], lon[x,y]), 3, E[x,y], P0, Tk) for x=1:dom_shape[1], y=1:dom_shape[2] ]
 
-    println("Done")
-    
+    ###  Run the model
+    for t in 2:length(wtm)
+    	mt = wtm[t]
+	println("INFO: model time is $mt, step $t")
+
+        # run the model update
+	for i in 1:size(models,1)
+	    for j in 1:size(models,2)
+	        advance_model(models[i,j], Ed[t-1, i, j], Ew[t-1, i, j], rain[t-1, i, j], dt, Q)
+		advance_model(models_na[i,j], Ed[t-1, i, j], Ew[t-1, i, j], rain[t-1, i, j], dt, Q)
+	    end
+	end
+    end
+
 end
 
 

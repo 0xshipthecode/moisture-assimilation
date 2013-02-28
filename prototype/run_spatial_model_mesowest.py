@@ -87,7 +87,7 @@ def run_module():
     # read in spatial and temporal extent of WRF variables
     lat, lon = wrf_data.get_lats(), wrf_data.get_lons()
     tm = wrf_data.get_gmt_times()
-    Nt = cfg['Nt'] if cfg.has_key('Nt') else len(tm)
+    Nt = cfg['Nt'] if cfg.has_key('Nt') and cfg['Nt'] is not None else len(tm)
     dom_shape = lat.shape
 
     # retrieve the rain variable
