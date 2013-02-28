@@ -19,7 +19,7 @@ import Storage.setup_tag, Storage.spush, Storage.next_frame, Storage.flush_frame
 
 using Stations
 import Stations.Station, Stations.Observation, Stations.load_station_info,
-       Stations.load_station_data, Stations.build_observation_data, Stations.register_to_grid
+       Stations.load_station_data, Stations.build_observation_data, Stations.register_to_grid, Stations.nearest_grid_point, Stations.obs_value
 
 using Kriging
 import Kriging.trend_surface_model_kriging
@@ -46,17 +46,20 @@ function main(args)
     Storage.sopen(cfg["output_dir"], "moisture_model_v2_diagnostics.txt", "frame")
 
     # setup Storage & output policies for interesting quantities
-    setup_tag("assim_K0", false, true, true)
-    setup_tag("assim_K1", true, true, true)
-    setup_tag("assim_data", false, false, true)
+    setup_tag("mt", true, true, true)
 
-    setup_tag("obs_residual_var", true, true, true)
+    setup_tag("fm10_model_state", false, false, false)
+    setup_tag("fm10_model_var", false, false, false)
 
-    setup_tag("fm10_model_var", false, true, true)
-    setup_tag("fm10_kriging_var", false, true, true)
     setup_tag("kriging_beta", true, true, true)
-    setup_tag("mt", false, true, true)
     setup_tag("kriging_xtx_cond", true, true, true)
+    setup_tag("kriging_field_at_obs", false, false, false)
+    setup_tag("kriging_obs", false, false, false)
+    setup_tag("kriging_field", false, false, false)
+    setup_tag("kriging_variance", false, false, false)
+
+    setup_tag("model_raws_mae", true, true, true)
+    setup_tag("model_na_raws_mae", true, true, true)
 
     ### Load WRF output data
 
@@ -111,14 +114,19 @@ function main(args)
     mresV = zeros(Float64, dsize)
     mid = zeros(Int32, dsize)
     Kg = zeros(Float64, (dsize[1], dsize[2], 9))
-    X = zeros(Float64, (dsize[1], dsize[2], 1))
 
     println("INFO: time step from WRF is $dt s.")
 
     # build static part of covariates
-#    X[:,:,2] = (lon - mean(lon)) / std(lon)
-#    X[:,:,3] = (lat - mean(lat)) / std(lat)
-#    X[:,:,4] = (hgt - mean(hgt)) / std(hgt)
+    covar_ids = cfg["static_covariates"]
+    covar_map = [ :lon => lon, :lat => lat, :elevation => hgt ]
+    Xd3 = length(covar_ids) + 1                         
+    X = zeros(Float64, (dsize[1], dsize[2], Xd3))
+    for i in 2:Xd3
+        v = covar_map[covar_ids[i-1]]
+        X[:,:,i] = (v - mean(v)) / std(v)
+    end
+    println("INFO: there are $Xd3 covariates (including model state).")
 
     # construct model grid from fuel parameters
     Tk = [ 1.0, 10.0, 100.0 ]
@@ -145,33 +153,49 @@ function main(args)
 	    end
 	end
 
+        # store the model state in an array (and store in output frame)
+        fm10_model_state = [ models[i,j].m_ext[2] for i=1:dsize[1], j=1:dsize[2] ]
+        fm10_model_var = [ models[i,j].P[2,2] for i=1:dsize[1], j=1:dsize[2] ]
+
+        spush("fm10_model_state", fm10_model_state)
+        spush("fm10_model_var", fm10_model_var)
+
         # if observation data for this timepoint is available
         obs_i = Observation[]
-        tm_valid_now = filter(x -> abs((mt - x).millis) / 1000.0 < 20*60, obs_times)
+        tm_valid_now = filter(x -> abs((mt - x).millis) / 1000.0 < 30*60, obs_times)
         if length(tm_valid_now) > 0
 
             # gather all observations
             for t in tm_valid_now append!(obs_i, obs_fm10[t]) end
 
-            # amend the covariates with the current fm10 model state
-	    for i in 1:dsize[1]
-	        for j in 1:dsize[2]
-                    X[i,j,1] = models[i,j].m_ext[2]
-	        end
-	    end
+            # set the current fm10 model state as the covariate
+            X[:,:,1] = fm10_model_state
             
+            # store diagnostic information
+            ngp_list = map(x -> nearest_grid_point(x), obs_i)
+            m_at_obs = Float64[X[p[1], p[2], 1] for p in  ngp_list]
+            m_na_at_obs = Float64[models_na[p[1], p[2]].m_ext[2] for p in ngp_list]
+            raws = Float64[obs_value(o) for o in obs_i]
+
+            spush("model_raws_mae", mean(abs(m_at_obs - raws)))
+            spush("model_na_raws_mae", mean(abs(m_na_at_obs - raws)))
+
             # compute the kriging estimate
-            K, V, beta = trend_surface_model_kriging(obs_i, X)
-            spush("kriging_beta", beta)
+            K, V, y = trend_surface_model_kriging(obs_i, X)
+
+            # push diagnostic outputs
+            spush("kriging_field", K)
+            spush("kriging_variance", V)
 
             # execute the krigin update at each model
             Kp = zeros(1)
-            Vp = zeros((1,1))
+            Vp = zeros(1,1)
             fuel_types = [2]
             for i in 1:dsize[1]
                 for j in 1:dsize[2]
                     Kp[1] = K[i,j]
                     Vp[1,1] = V[i,j]
+                    println("Running Kalman update at $i,$jj with K=$(K[i,j]) and V=$(V[i,j])")
                     kalman_update(models[i,j], Kp, Vp, fuel_types)
                 end
             end

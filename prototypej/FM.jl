@@ -119,10 +119,9 @@ end
 
 function kalman_update(c::FMModel, O::Vector{Float64},
                        V::Matrix{Float64}, fuel_types::Vector{Int})
-    k = c.k
     P = c.P
     Nf = size(fuel_types,1)
-    H = zeros((Nf,2*k+3))
+    H = zeros((Nf,2*c.k+3))
 
     # construct observation operator for the given fuel types
     ndx = 1
@@ -132,7 +131,9 @@ function kalman_update(c::FMModel, O::Vector{Float64},
     end
     
     # Kalman update matrices
-    K = P * H' * inv(H * P * H' + V)
+    T = H * P * H' + V
+    println(T)
+    K = P * H' * inv(T)
 
     # update the state
     c.m_ext += K * (O - c.m_ext[fuel_types])

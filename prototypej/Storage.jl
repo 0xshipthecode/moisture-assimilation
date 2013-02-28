@@ -125,9 +125,7 @@ function spush(tag :: String, data)
 
     # if logout is requested
     if c[3] 
-#        python_render_item(sm.log_io, tag, data)
         println(sm.log_io, string(tag, " : ", data))
-#        println(sm.log_io, ",")
     end
 end
 
