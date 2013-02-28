@@ -8,9 +8,6 @@ module Kriging
 #
 #
 
-using LSq
-import LSq.estimate_ols
-
 using Stations
 import Stations.nearest_grid_point, Stations.obs_variance, Stations.obs_value
 
