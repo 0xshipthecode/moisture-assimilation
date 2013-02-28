@@ -153,4 +153,10 @@ function compute_equilibrium_moisture(w::WRFData)
 end
 
 
+function slice_field(w::WRFData, fn::String)
+    # remove the time dimension from a static field and save a lot of storage
+    w.fields[fn] = squeeze(w.fields[fn][1,:,:], 1)
+end
+
+
 end

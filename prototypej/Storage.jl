@@ -15,6 +15,10 @@ module Storage
 #
 #
 
+using Calendar
+import Calendar.CalendarTime
+
+
 
 # the global storage manager object
 global sm = nothing
@@ -110,28 +114,32 @@ function spush(tag :: String, data)
 
     # store in time series store if requested
     if c[1]
-        if has(sm.ts_store, tag)
-            push!(sm.ts_store[tag], data)
-        else
-            sm.ts_store[tag] = [data]
-        end
+        if !has(sm.ts_store, tag) sm.ts_store[tag] = typeof(data)[] end
+        push!(sm.ts_store[tag], data)
     end
 
     # if stdout requested print it
     if c[2]
-        python_render_item(STDOUT, tag, data)
-        println(STDOUT)
+        println(string(tag, " : ", data))
     end
 
     # if logout is requested
     if c[3] 
-        python_render_item(sm.log_io, tag, data)
-        println(sm.log_io)
+#        python_render_item(sm.log_io, tag, data)
+        println(sm.log_io, string(tag, " : ", data))
+#        println(sm.log_io, ",")
     end
 end
 
 
-function python_render_item(io :: IO, k :: String, v :: Array{Any})
+function python_render_item(io::IO, k::String, v::CalendarTime)
+    show(io,k)
+    print(io, " : ")
+    print(io, "datetime($(year(v)), $(month(v)), $(day(v)), $(hour(v)), $(minute(v)), $(second(v)))")
+end
+
+
+function python_render_item(io::IO, k::String, v::Array)
     show(io, k)
     print(io, " : [")
 
@@ -147,7 +155,7 @@ function python_render_item(io :: IO, k :: String, v :: Array{Any})
 end
 
 
-function python_render_item(io :: IO, k :: String, v :: Any)
+function python_render_item(io::IO, k::String, v::Any)
     show(io, k)
     print(io, " : ")
     show(io, v)

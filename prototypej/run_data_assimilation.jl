@@ -19,14 +19,15 @@ import Storage.setup_tag, Storage.spush, Storage.next_frame, Storage.flush_frame
 
 using Stations
 import Stations.Station, Stations.Observation, Stations.load_station_info,
-       Stations.load_station_data, Stations.build_observation_data
+       Stations.load_station_data, Stations.build_observation_data, Stations.register_to_grid
 
 using Kriging
+import Kriging.trend_surface_model_kriging
 
 using WRF
 
 using FM
-import FM.FMModel, FM.advance_model
+import FM.FMModel, FM.advance_model, FM.kalman_update
 
 using LSq
 import LSq.estimate_ols
@@ -54,24 +55,29 @@ function main(args)
 
     setup_tag("obs_residual_var", true, true, true)
 
-    setup_tag("fm10_model_residual_var", true, true, true)
     setup_tag("fm10_model_var", false, true, true)
     setup_tag("fm10_kriging_var", false, true, true)
+    setup_tag("kriging_beta", true, true, true)
+    setup_tag("mt", false, true, true)
+    setup_tag("kriging_xtx_cond", true, true, true)
 
     ### Load WRF output data
 
     # read in data from the WRF output file pointed to by cfg
-    w = WRF.load_wrf_data(cfg["wrf_output"], ["ZSF"])
+    w = WRF.load_wrf_data(cfg["wrf_output"], ["HGT"])
+
+    # the terrain height need not be stored for all time points
+    WRF.slice_field(w, "HGT")
 
     # extract WRF fields
     lat, lon = WRF.lat(w), WRF.lon(w)
     wtm = WRF.times(w)
-    dom_shape = size(lat)
+    dsize = size(lat)
 
     # retrieve equilibria and rain
     Ed, Ew = WRF.field(w, "Ed"), WRF.field(w, "Ew")
     rain = WRF.field(w, "RAIN")
-    zsf = WRF.field(w, "ZSF")
+    hgt = WRF.field(w, "HGT")
 
     ### Load observation data from stations
     io = open(join([cfg["station_data_dir"], cfg["station_list_file"]], "/"), "r")
@@ -83,11 +89,13 @@ function main(args)
     for sid in station_ids
         s = load_station_info(join([cfg["station_data_dir"], string(sid, ".info")], "/"))
         load_station_data(s, join([cfg["station_data_dir"], string(sid, ".obs")], "/"))
+	register_to_grid(s, lat, lon)
         push!(stations, s)
     end
 
     # build the observation data from stations
     obs_fm10 = build_observation_data(stations, "FM")
+    obs_times = keys(obs_fm10)
 
     ### Initialize model
 
@@ -95,41 +103,89 @@ function main(args)
     maxE = cfg["maxE"]
 
     # construct initial conditions (FIXME: can we do better here?)
-    E = squeeze(0.5 * (Ed[1,:,:] + Ew[1,:,:]), 1)
+    E = squeeze(0.5 * (Ed[2,:,:] + Ew[2,:,:]), 1)
 
     # set up parameters
     Q = eye(9) * cfg["Q"]
     P0 = eye(9) * cfg["P0"]
     dt = (wtm[2] - wtm[1]).millis / 1000
+    mV = zeros(Float64, dsize)
+    pred = zeros(Float64, dsize)
+    mresV = zeros(Float64, dsize)
+    mid = zeros(Int32, dsize)
+    Kg = zeros(Float64, (dsize[1], dsize[2], 9))
+    X = zeros(Float64, (dsize[1], dsize[2], 1))
+
     println("INFO: time step from WRF is $dt s.")
-    K = zeros(Float64, dom_shape)
-    V = zeros(Float64, dom_shape)
-    mV = zeros(Float64, dom_shape)
-    pred = zeros(Float64, dom_shape)
-    mresV = zeros(Float64, dom_shape)
-    Kfi = zeros(Float64, dom_shape)
-    Vfi = zeros(Float64, dom_shape)
-    mid = zeros(Int32, dom_shape)
-    Kg = zeros(Float64, (dom_shape[1], dom_shape[2], 9))
+
+    # build static part of covariates
+#    X[:,:,2] = (lon - mean(lon)) / std(lon)
+#    X[:,:,3] = (lat - mean(lat)) / std(lat)
+#    X[:,:,4] = (hgt - mean(hgt)) / std(hgt)
 
     # construct model grid from fuel parameters
     Tk = [ 1.0, 10.0, 100.0 ]
-    models = [ FMModel((lat[x,y], lon[x,y]), 3, E[x,y], P0, Tk) for x=1:dom_shape[1], y=1:dom_shape[2] ]
-    models_na = [ FMModel((lat[x,y], lon[x,y]), 3, E[x,y], P0, Tk) for x=1:dom_shape[1], y=1:dom_shape[2] ]
+    models = Array(FMModel, size(E))
+    models_na = Array(FMModel, size(E))
+    for i in 1:dsize[1]
+    	for j in 1:dsize[2]
+            geo_loc = (lat[i,j], lon[i,j])
+	    models[i,j] = FMModel(geo_loc, 3, E[i,j], P0, Tk)
+	    models_na[i,j] = FMModel(geo_loc, 3, E[i,j], P0, Tk)
+	end
+    end
 
     ###  Run the model
     for t in 2:length(wtm)
     	mt = wtm[t]
-	println("INFO: model time is $mt, step $t")
+        spush("mt", mt)
 
         # run the model update
-	for i in 1:size(models,1)
-	    for j in 1:size(models,2)
+	for i in 1:dsize[1]
+	    for j in 1:dsize[2]
 	        advance_model(models[i,j], Ed[t-1, i, j], Ew[t-1, i, j], rain[t-1, i, j], dt, Q)
 		advance_model(models_na[i,j], Ed[t-1, i, j], Ew[t-1, i, j], rain[t-1, i, j], dt, Q)
 	    end
 	end
+
+        # if observation data for this timepoint is available
+        obs_i = Observation[]
+        tm_valid_now = filter(x -> abs((mt - x).millis) / 1000.0 < 20*60, obs_times)
+        if length(tm_valid_now) > 0
+
+            # gather all observations
+            for t in tm_valid_now append!(obs_i, obs_fm10[t]) end
+
+            # amend the covariates with the current fm10 model state
+	    for i in 1:dsize[1]
+	        for j in 1:dsize[2]
+                    X[i,j,1] = models[i,j].m_ext[2]
+	        end
+	    end
+            
+            # compute the kriging estimate
+            K, V, beta = trend_surface_model_kriging(obs_i, X)
+            spush("kriging_beta", beta)
+
+            # execute the krigin update at each model
+            Kp = zeros(1)
+            Vp = zeros((1,1))
+            fuel_types = [2]
+            for i in 1:dsize[1]
+                for j in 1:dsize[2]
+                    Kp[1] = K[i,j]
+                    Vp[1,1] = V[i,j]
+                    kalman_update(models[i,j], Kp, Vp, fuel_types)
+                end
+            end
+
+            # move to the next storage frame
+            next_frame()
+        end
     end
+
+    # Close down the storage system
+    sclose()
 
 end
 

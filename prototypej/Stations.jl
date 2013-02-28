@@ -8,11 +8,9 @@ import Calendar.CalendarTime
 
 import Base.show
 
-export Station, Observation
-#export show, obs_times, raw_obs, obs_var, id, name, load_station_info, load_station_data
-
 
 abstract AbstractStation
+
 
 type Observation
 
@@ -36,7 +34,6 @@ type Observation
 
 end
 
-
 type Station <: AbstractStation
 
     # station id
@@ -48,6 +45,9 @@ type Station <: AbstractStation
     # station location (lat/lon decimal)
     loc::GeoLoc
 
+    # nearest grid point (tuple)
+    ngp::(Int64, Int64)
+
     # station elevation (meters)
     elevation::Float64
 
@@ -57,11 +57,16 @@ type Station <: AbstractStation
     # available observation types from the station
     sensors :: Array{String}
 
-    Station() = new("", "", GeoLoc(0.0, 0.0), 0.0,  Dict{String,Array{Observation}}(), Array(String,0))
+    Station() = new("", "", GeoLoc(0.0, 0.0), (-1,-1), 0.0,  Dict{String,Array{Observation}}(), Array(String,0))
 
-    Station(id, name, loc, elevation) = new(id, name, loc, elevation, Dict{String,Array{Observation}}(), Array(String,0))
+    Station(id, name, loc, elevation) = new(id, name, loc, (-1,-1), elevation, Dict{String,Array{Observation}}(), Array(String,0))
 
 end
+
+obs_variance(o::Observation) = o.var
+obs_value(o::Observation) = o.value
+obs_type(o::Observation) = o.obs_type
+nearest_grid_point(o::Observation) = o.station.ngp
 
 
 function show(io::IO, o::Observation)
@@ -70,29 +75,16 @@ function show(io::IO, o::Observation)
 end
 
 
-function obs_times(s::Station, obs_type::String)
-    return [o.tm for o in observations(s, obs_type)]
+obs_times(s::Station, obs_type::String) = [o.tm for o in observations(s, obs_type)]
+obs_var(s::Station, obs_type::String) = s.obs[obs_type]
+id(s::Station) = s.id
+name(s::Station) = s.name
+observations(s::Station, obs_type::String) = s.obs[obs_type]
+
+function register_to_grid(s::Station, lat::Array{Float64,2}, lon::Array{Float64,2})
+    s.ngp = ind2sub(size(lat), indmin( (s.loc.lat - lat).^2 + (s.loc.lon - lon).^2 ))
 end
-
-
-function obs_var(s::Station, obs_type::String)
-    return s.obs[obs_type]
-end
-
-
-function id(s::Station)
-    return s.id
-end
-
-
-function name(s::Station)
-    return s.name
-end
-
-
-function observations(s::Station, obs_type::String)
-    return s.obs[obs_type]
-end
+    
 
 
 function observations(s::Station, obs_type::String, tm::Array{CalendarTime})
@@ -117,6 +109,7 @@ function observations(s::Station, obs_type::String, tm::Array{CalendarTime})
     
     return obs_ret
 end
+
 
 
 function load_station_info(fname :: String)

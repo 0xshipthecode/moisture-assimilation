@@ -137,7 +137,6 @@ def universal_kriging_data_to_model(obs_data, obs_stds, m, wrf_data, mod_stds, t
 
 
 
-
 def trend_surface_model_kriging(obs_data, wrf_data, mu_mod):
     """
     Trend surface model kriging, which assumes spatially uncorrelated errors.
