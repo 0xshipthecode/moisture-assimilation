@@ -29,9 +29,6 @@ using WRF
 using FM
 import FM.FMModel, FM.advance_model, FM.kalman_update
 
-using LSq
-import LSq.estimate_ols
-
 
 function main(args)
 
