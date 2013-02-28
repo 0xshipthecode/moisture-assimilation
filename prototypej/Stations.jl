@@ -55,7 +55,7 @@ type Station <: AbstractStation
     obs::Dict{String,Array{Observation}}
 
     # available observation types from the station
-    sensor_types :: Array{String}
+    sensors :: Array{String}
 
     Station() = new("", "", GeoLoc(0.0, 0.0), 0.0,  Dict{String,Array{Observation}}(), Array(String,0))
 
@@ -73,7 +73,6 @@ end
 function obs_times(s::Station, obs_type::String)
     return [o.tm for o in observations(s, obs_type)]
 end
-
 
 
 function obs_var(s::Station, obs_type::String)
@@ -140,11 +139,10 @@ function load_station_info(fname :: String)
     s.elevation = float(strip(readline_skip_comments(io)))
 
     # read all observation types acquired by the station
-    s.sensor_types = map(x -> strip(x), split(readline_skip_comments(io), ","))
-    nvars = length(s.sensor_types)
+    s.sensors = map(x -> strip(x), split(readline_skip_comments(io), ","))
 
     # create var time series containers
-    for v in s.sensor_types
+    for v in s.sensors
         s.obs[v] = Array(Float64, 0)
     end
 
@@ -157,7 +155,6 @@ end
 
 
 function load_station_data(s::Station, fname::String)
-
     # open file
     io = open(fname, "r")
 
@@ -177,7 +174,7 @@ function load_station_data(s::Station, fname::String)
         # read in variances of observations
         variances = map(x -> float(x), split(readline_skip_comments(io), ","))
 
-        obs = Observation[]
+        # add each observation to the station dictionary
         for i in 1:length(variables)
             var = variables[i]
             push!(s.obs[var], Observation(s, tm, vals[i], var, variances[i]))

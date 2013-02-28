@@ -65,6 +65,8 @@ def load_station_data(station_file):
 
 if __name__ == "__main__":
 
+    gmt_tz = pytz.timezone("GMT")
+
     if len(sys.argv) < 3:
         print("Usage: extract_observations.py station_list obs_var_table")
         sys.exit(1)
@@ -100,7 +102,7 @@ if __name__ == "__main__":
                 # remove unavailable measurments
                 var_list, obs_list = zip(*obs[tm])
                 obs_var = [ obs_var_tbl[x] if x in obs_var_tbl else float("nan") for x in var_list ]
-                f.write(tm.strftime('%Y-%m-%d_%H:%M'))
+                f.write(tm.astimezone(gmt_tz).strftime('%Y-%m-%d_%H:%M %Z'))
                 f.write('\n')
                 f.write(string.join(map(str, var_list), ", "))
                 f.write('\n')

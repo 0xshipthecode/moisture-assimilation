@@ -87,7 +87,7 @@ def run_module():
     # read in spatial and temporal extent of WRF variables
     lat, lon = wrf_data.get_lats(), wrf_data.get_lons()
     tm = wrf_data.get_gmt_times()
-    Nt = cfg['Nt'] if cfg['Nt'] is not None else len(tm)
+    Nt = cfg['Nt'] if cfg.has_key('Nt') else len(tm)
     dom_shape = lat.shape
 
     # retrieve the rain variable
@@ -102,15 +102,15 @@ def run_module():
     with open(os.path.join(cfg['station_data_dir'], cfg['station_list_file']), 'r') as f:
         si_list = f.read().split('\n')
 
-    si_list = filter(lambda x: len(x) > 0, map(string.strip, si_list))
+    si_list = filter(lambda x: len(x) > 0 and x[0] != '#', map(string.strip, si_list))
 
     # for each station id, load the station
     stations = []
-    for sinfo in si_list:
-        code = sinfo.split(',')[0]
-        mws = MesoWestStation(sinfo, wrf_data)
-        for suffix in [ '_1', '_2', '_3', '_4', '_5', '_6', '_7' ]:
-            mws.load_station_data(os.path.join(cfg['station_data_dir'], '%s%s.xls' % (code, suffix)))
+    for code in si_list:
+        mws = MesoWestStation(code)
+        mws.load_station_info(os.path.join(cfg["station_data_dir"], "%s.info" % code))
+        mws.register_to_grid(wrf_data)
+        mws.load_station_data(os.path.join(cfg["station_data_dir"], "%s.obs" % code))
         stations.append(mws)
 
     print('Loaded %d stations.' % len(stations))
@@ -119,12 +119,9 @@ def run_module():
     stations = filter(MesoWestStation.data_ok, stations)
     print('Have %d stations with complete data.' % len(stations))
 
-    # set the measurement variance of the stations
-    for s in stations:
-        s.set_measurement_variance('fm10', cfg['fm10_meas_var'])
-
     # build the observation data
-    obs_data_fm10 = build_observation_data(stations, 'fm10', wrf_data, tm)
+#    obs_data_fm10 = build_observation_data(stations, 'FM')
+    obs_data_fm10 = {}
 
     ### Initialize model and visualization
 

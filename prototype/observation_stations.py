@@ -1,6 +1,5 @@
 
 
-
 from time_series_utilities import match_sample_times
 from spatial_model_utilities import find_closest_grid_point, great_circle_distance
 
@@ -8,7 +7,17 @@ import re
 import pytz
 import codecs
 from datetime import datetime, timedelta
-import xlrd
+import string
+
+
+def readline_skip_comments(f):
+    """                                                                             Read a new line while skipping comments.                                        """
+    l = f.readline().strip()
+    while l[0] == '#':
+        l = f.readline().strip()
+    return l
+
+
 
 
 class Observation:
@@ -16,15 +25,15 @@ class Observation:
     An observation of a field value at a certain time.
     """
     
-    def __init__(self, s, tm, fm_obs, fm_var, field_name):
+    def __init__(self, s, tm, obs, var, field_name):
         """
         Constructs an observation packet from the info dictionary.
         """
         self.s = s
         self.tm = tm
-        self.obs_val = fm_obs
+        self.obs_val = obs
         self.field_name = field_name
-        self.obs_var = fm_var
+        self.obs_var = var
 
         
     def get_time(self):
@@ -87,8 +96,6 @@ class Station:
         self.grid_pt = None
         self.dist_grid_pt = None
 
-        # the measurement variance of different observations is unknown
-        self.measurement_variance = {}
 
 
     def register_to_grid(self, wrf_data):
@@ -144,52 +151,14 @@ class Station:
         return self.elevation
     
     
-    def get_measurement_variance(self, field_name):
-        """
-        Return the variance of the measurement from this station.
-        """
-        return self.measurement_variance[field_name]
-    
-    
-    def set_measurement_variance(self, field_name, v):
-        """
-        Set the variance of the measurements from this station.
-        """
-        self.measurement_variance[field_name] = v
-
-
-    def get_observations_raw(self, obs_name):
-        """
-        Return an entire time series of given observation type.  Returns
-        the raw observation values.  Call must manage time stamps.
-        """
-        return self.obs_vars[obs_name]
-
 
     def get_observations(self, obs_type):
         """
         Returns a list of Observations for given observation type (var name).
         """
-        obs = self.get_observations_raw(obs_type)
-        mv = self.get_measurement_variance(obs_type)
-        return [Observation(self, self.tm[i], obs[i], mv, obs_type) for i in range(len(obs))]
+        return self.obs[obs_type]
 
         
-    def get_observations_for_times(self, obs_type, tm):
-        """
-        Get the observations of the field which match the times passed in tm.
-        Also returns an index array which shows which times in the argument tm
-        match the observation times returned.
-        Returns a set of Observations.
-        """
-        _, indx_me, _ = match_sample_times(self.tm, tm)
-        if len(indx_me) < len(tm):
-            raise ValueError('Observations for some times not available.')
-        ts = self.get_observations_raw(obs_type) 
-        mv = self.get_measurement_variance(obs_type)
-        return [Observation(self, self.tm[i], ts[i], mv, obs_type) for i in indx_me]
-
-
 
 class StationAdam(Station):
     """
@@ -284,7 +253,7 @@ class MesoWestStation(Station):
     An observation station with data downloaded from the MesoWest website in xls format.
     """
     
-    def __init__(self, info_string, wrf_data = None):
+    def __init__(self, name):
         """
         Initialize the station using an info_string that is written by the scrape_stations.py
         script into the 'station_infos' file.
@@ -294,75 +263,64 @@ class MesoWestStation(Station):
         self.data_loaded_ok = True
 
         # parse the info_string
-        tokens = info_string.split(',')
-        self.name = tokens[0]
-        self.lat = float(tokens[1])
-        self.lon = float(tokens[2])
-        self.elevation = float(tokens[3]) * 0.3048
+        self.name = name
 
         Station.__init__(self)
 
-        # register to WRF grid
-        self.register_to_grid(wrf_data)
-        
-        # construct empty variable lists for what we wish to load
-        for var in [ 'air_temp', 'rh', 'fm10' ]:
-            self.obs_vars[var] = []
+
+    def load_station_info(self, station_info):
+        """
+        Load station information from an .info file.                                                                              """
+        with open(station_info, "r") as f:
+
+            # read station id
+            self.id = readline_skip_comments(f)
+
+            # read station name
+            self.name = readline_skip_comments(f)
+
+            # read station geo location
+            loc_str = readline_skip_comments(f).split(",")
+            self.lat, self.lon = float(loc_str[0]), float(loc_str[1])
+
+            # read elevation
+            self.elevations = float(readline_skip_comments(f))
+
+            # read sensor types
+            self.sensors = map(lambda x: x.strip(), readline_skip_comments(f).split(","))
+
+            # create empty lists for observations
+            self.obs = {}
+            for s in self.sensors:
+                self.obs[s] = []
+
 
 
     def load_station_data(self, station_file):
         """
         Load all available fuel moisture data from the station measurement file
-        in xls format.
+        in an obs file.
         """
-        # load the worksheet
-        x = xlrd.open_workbook(station_file)
-        s = x.sheet_by_index(0)
-
-        # find the order of the variables
-        var_ord = []
-        cell_ord = []
-        for i in range(1,5):
-            cv = s.cell_value(0,i)
-            if 'TMP' in cv:
-                var_ord.append(self.obs_vars['air_temp'])
-                cell_ord.append(i)
-            elif 'RELH' in cv:
-                var_ord.append(self.obs_vars['rh'])
-                cell_ord.append(i)
-            elif 'FM' in cv:
-                var_ord.append(self.obs_vars['fm10'])
-                cell_ord.append(i)
-
-        if len(var_ord) != 3:
-            self.data_loaded_ok = False
-
-        # now read 24 entries starting at 
-        i = 1
         gmt_tz = pytz.timezone('GMT')
-        while True:
-            # parse the time stamp string
-            try:
-                tstamp = gmt_tz.localize(datetime.strptime(s.cell_value(i,0), '%m-%d-%Y %H:%M %Z'))
-                self.tm.append(tstamp.replace(minute=0)) 
-            except ValueError:
-                break
 
-            # parse the variables in order
-            for j in range(len(cell_ord)):
-                try:
-                    val = float(s.cell_value(i,cell_ord[j]))
-                    if var_ord[j] == self.obs_vars['fm10']:
-                        val = val / 100.0
-                    var_ord[j].append(val)
-                except ValueError:
-                    var_ord[j].append(float('nan'))
-                    self.data_loaded_ok = False
+        with open(station_file, "r") as f:
 
-            i += 1
+            # read in the date
+            tm_str = readline_skip_comments(f)
+            tstamp = gmt_tz.localize(datetime.strptime(tm_str, '%Y-%m-%d_%H:%M %Z'))
+            
+            # read in the variables
+            var_str = map(string.strip, readline_skip_comments(f).split(","))
+            
+            # read in observations
+            vals = map(lambda x: float(x), readline_skip_comments(f).split(","))
 
-        if i != 25:
-            self.data_loaded_ok = False
+            # read in variances
+            variances = map(lambda x: float(x), readline_skip_comments(f).split(","))
+
+            # construct observations
+            for vn,val,var in zip(var_str, vals, variances):
+                self.obs[vn].append(Observation(self, tstamp, val, var, vn))
 
 
     def data_ok(self):

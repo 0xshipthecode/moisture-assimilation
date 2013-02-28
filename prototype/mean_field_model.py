@@ -21,10 +21,10 @@ class MeanFieldModel:
         diagnostics().configure_tag("mfm_mape", True, True, True)
     
     
-    def fit_to_data(self, covar, obs, Sigma):
+    def fit_to_data(self, covar, obs, Sigma = None):
         """
         Fit the covariates to the observations using a general least squares
-        approach that works for universal kriging (general covariane)
+        approach that works for universal kriging (general covariance)
         and for trend surface modelling (diagonal covariance).
 
         The covariates must already correspond to observation locations.
@@ -35,10 +35,14 @@ class MeanFieldModel:
         # gather observation data and corresponding model data     
         # FIXME: doing an inverse here instead of a linear solve as I am lazy
         # and I know that matrix is well conditioned
-        XtW = np.dot(covar.T, Sigma)
+        XtW = np.dot(covar.T, Sigma) if Sigma is not None else covar.T
+        print XtW.shape
+
         XtWX_1 = np.linalg.inv(np.dot(XtW, covar))
+        print XtWX_1.shape
     
         # compute the weighted regression
+        print obs.shape
         gamma = np.dot(XtWX_1, np.dot(XtW, obs))
 
         # push diagnostics out

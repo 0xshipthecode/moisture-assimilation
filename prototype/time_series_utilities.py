@@ -61,11 +61,12 @@ def match_time_series(stations, st_field_name, field, W):
     return matched
 
 
-def build_observation_data(stations, obs_type, wrf_data, mtm):
+def build_observation_data(stations, obs_type):
     """
-    Repackage the matched time series into a time-indexed structure which gives details on the observed data and active observation stations.
+    Repackage the matched time series into a time-indexed structure
+    which gives details on the observed data and active observation stations.
     
-        synopsis: obs_data = build_observation_data(stations, wrf_data)
+        synopsis: obs_data = build_observation_data(stations, obs_type)
         
     """
     Ns = len(stations)
