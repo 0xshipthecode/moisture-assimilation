@@ -17,9 +17,10 @@ import Storage.spush
 
 function universal_kriging(obs, obs_stds, m, m_stds, wrf_data, t)
 
-
+# Universal kriging not implemented yet
 
 end
+
 
 
 function trend_surface_model_kriging(obs_data, covar, K, V)

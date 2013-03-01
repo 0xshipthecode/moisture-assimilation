@@ -152,14 +152,14 @@ function main(args)
 	end
     end
 
-    ###  Run the model
+    ###  Run the model and data assimilation
     for t in 2:length(wtm)
     	mt = wtm[t]
         spush("mt", mt)
 
-        # run the model update
+        # run the model update (in parallel if possible)
 	for i in 1:dsize[1]
-	    for j in 1:dsize[2]
+	    @parallel for j in 1:dsize[2]
 	        advance_model(models[i,j], Ed[t-1, i, j], Ew[t-1, i, j], rain[t-1, i, j], dt, Q)
 		advance_model(models_na[i,j], Ed[t-1, i, j], Ew[t-1, i, j], rain[t-1, i, j], dt, Q)
 	    end
@@ -224,7 +224,7 @@ function main(args)
             Vp = zeros(1,1)
             fuel_types = [2]
             for i in 1:dsize[1]
-                for j in 1:dsize[2]
+                @parallel for j in 1:dsize[2]
                     Kp[1] = K[i,j]
                     Vp[1,1] = V[i,j]
                     kalman_update(models[i,j], Kp, Vp, fuel_types)
