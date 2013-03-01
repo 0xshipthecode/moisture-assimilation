@@ -131,9 +131,7 @@ function kalman_update(c::FMModel, O::Vector{Float64},
     end
     
     # Kalman update matrices
-    T = H * P * H' + V
-    println(T)
-    K = P * H' * inv(T)
+    K = P * H' / (H * P * H' + V)
 
     # update the state
     c.m_ext += K * (O - c.m_ext[fuel_types])

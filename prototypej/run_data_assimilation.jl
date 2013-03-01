@@ -124,7 +124,7 @@ function main(args)
     X = zeros(Float64, (dsize[1], dsize[2], Xd3))
     for i in 2:Xd3
         v = covar_map[covar_ids[i-1]]
-        X[:,:,i] = (v - mean(v)) / std(v)
+        X[:,:,i] = v - mean(v)  # ensure zero mean for each covariate
     end
     println("INFO: there are $Xd3 covariates (including model state).")
 
@@ -170,7 +170,14 @@ function main(args)
 
             # set the current fm10 model state as the covariate
             X[:,:,1] = fm10_model_state
-            
+
+            # scale each covariate to have approximately the same norm as fm10
+            # to improve condition number of X'*X
+            s = sum(X[:,:,1].^2)^0.5
+            for i in 2:Xd3
+                X[:,:,i] = X[:,:,i] / sum(X[:,:,i].^2)^0.5 * s
+            end
+
             # store diagnostic information
             ngp_list = map(x -> nearest_grid_point(x), obs_i)
             m_at_obs = Float64[X[p[1], p[2], 1] for p in  ngp_list]
@@ -195,7 +202,6 @@ function main(args)
                 for j in 1:dsize[2]
                     Kp[1] = K[i,j]
                     Vp[1,1] = V[i,j]
-                    println("Running Kalman update at $i,$jj with K=$(K[i,j]) and V=$(V[i,j])")
                     kalman_update(models[i,j], Kp, Vp, fuel_types)
                 end
             end
@@ -206,7 +212,7 @@ function main(args)
     end
 
     # Close down the storage system
-    sclose()
+    Storage.sclose()
 
 end
 

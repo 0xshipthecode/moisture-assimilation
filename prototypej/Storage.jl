@@ -145,10 +145,10 @@ function python_render_item(io::IO, k::String, v::Array)
     s = size(v)
     print(io, length(s) > 1 ? "np.reshape([" : "[")
     if length(v) > 0
-        show(io, v[1])
+        @printf(io, "%f", v[1])
         for i in v[2:]
             print(io, ", ")
-            show(io, i)
+            @printf(io, "%f", i)
         end
     end
     println(io, length(s) > 1 ? "], $s, order = 'F')" : "]")
