@@ -124,14 +124,20 @@ function main(args)
 
     # build static part of covariates
     covar_ids = cfg["static_covariates"]
-    covar_map = [ :lon => lon, :lat => lat, :elevation => hgt, :constant => ones(Float64, dsize) ]
+    covar_map = [ :lon => lon, :lat => lat, :elevation => hgt,
+                  :constant => ones(Float64, dsize) ]
     Xd3 = length(covar_ids) + 1                         
     X = zeros(Float64, (dsize[1], dsize[2], Xd3))
+    Xr = zeros(Float64, (dsize[1], dsize[2], Xd3))
     for i in 2:Xd3
         v = covar_map[covar_ids[i-1]]
         if covar_ids[i-1] != :constant
-            X[:,:,i] = v - mean(v)  # ensure zero mean for each covariate (except for the constant)
+            println("Removing mean of covariate $(covar_ids[i-1]).")
+            Xr[:,:,i] = v - mean(v)  # ensure zero mean for each covariate (except for the constant)
+        else
+            Xr[:,:,i] = v
         end
+        Xr[:,:,i] /= sum(Xr[:,:,i].^2)^0.5
     end
     println("INFO: there are $Xd3 covariates (including model state).")
 
@@ -182,9 +188,10 @@ function main(args)
 
             # scale each covariate to have approximately the same norm as fm10
             # to improve condition number of X'*X
+            # FIXME: even better would be to precondition inside kriging
             s = sum(X[:,:,1].^2)^0.5
             for i in 2:Xd3
-                X[:,:,i] = X[:,:,i] / sum(X[:,:,i].^2)^0.5 * s
+                X[:,:,i] = Xr[:,:,i] * s
             end
 
             # store diagnostic information
@@ -202,7 +209,7 @@ function main(args)
             spush("kriging_obs_ngp", ngp_list)
 
             # compute the kriging estimate
-            K, V, y = trend_surface_model_kriging(obs_i, X)
+            K, V = trend_surface_model_kriging(obs_i, X)
 
             # push diagnostic outputs
             spush("kriging_field", K)
