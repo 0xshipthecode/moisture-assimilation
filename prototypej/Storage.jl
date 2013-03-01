@@ -162,7 +162,7 @@ function python_render_item(io::IO, k::String, v::Any)
 end
 
 # specialize for floats which are otherwise printed with too many digits
-python_render_item(io::IO, f::Float64) = @printf(io, "%f", v[1])
+python_render_item(io::IO, f::Float64) = @printf(io, "%f", f)
 python_render_item(io::IO, f) = show(io, f)
 
 
