@@ -40,8 +40,8 @@ function advance_model(c::FMModel, Ed::Float64, Ew::Float64,
     dE, dS, dTrk = m_ext[2*k+1:2*k+3]
 
     # add assimilation deltas to moisture equilibria
-    Ed += dE
-    Ew += dE
+    Ed = max(0, Ed + dE)
+    Ew = max(0, Ew + dE)
 
     # compute equilibria
     equi = copy(m)
@@ -73,7 +73,7 @@ function advance_model(c::FMModel, Ed::Float64, Ew::Float64,
     # in each fuel
     change = dt * rlag
     m_new = zeros(k)
-    for i in [1:k]
+    for i in 1:k
         if change[i] < 0.01
             m_new[i] = m[i] + (equi[i] - m[i]) * (1.0 - exp(-change[i]))
         else
@@ -83,22 +83,24 @@ function advance_model(c::FMModel, Ed::Float64, Ew::Float64,
 
     # compute Jacobian and update local covariance matrix
     J = zeros((2*k+3,2*k+3))
-    for i in [1:k]
+    for i in 1:k
 
         if change[i] < 0.01
-            J[i,i] = exp(-change[i])
+            J[i,i] = model_ids[i] < 4 ? exp(-change[i]) : 1.0
             dmi_dchng = (equi[i] - m[i]) * exp(-change[i])
             dmi_dequi = (1.0 - exp(-change[i]))
         else
-            J[i,i] = 1.0 - change[i] * (1.0 - 0.5 * change[i])
+            J[i,i] = model_ids[i] < 4 ? 1.0 - change[i] * (1.0 - 0.5 * change[i]) : 1.0
             dmi_dchng = (equi[i] - m[i]) * (1.0 - change[i])
             dmi_dequi = change[i] * (1.0 - 0.5 * change[i])
         end
 
-        if r < c.r0
-            J[i,k+i] = dmi_dchng * (-dt) * (Tk[i] + dTk[i])^(-2)
-            J[i,2*k+1] = model_ids[i] < 4 ? dmi_dequi : 0.0
-        else
+        if r < c.r0 # drying/wetting model or dead zone
+            if model_ids[i] < 4 # if not dead zone
+                J[i,k+i] = dmi_dchng * (-dt) * (Tk[i] + dTk[i])^(-2)
+                J[i,2*k+1] = dmi_dequi
+            end
+        else # rain model
             J[i,2*k+2] = dmi_dequi
             J[i,2*k+3] = dmi_dchng * dt * (exp(-(r - c.r0) / c.rk) - 1.0) * (c.Trk + dTrk)^(-2)
         end

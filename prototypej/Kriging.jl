@@ -46,14 +46,14 @@ function trend_surface_model_kriging(obs_data, covar, K, V)
 
     # compute the OLS fit of the covariates to the observations
     XtX = X' * X
-    spush("kriging_xtx_cond", cond(X' * X))
+    spush("kriging_xtx_cond", cond(XtX))
     beta = XtX \ (X' * y)
     spush("kriging_beta", beta')
 
     # compute kriging field and kriging variance and fill out
     # the passed arrays
-    for i in 1:size(V,1)
-        for j in 1:size(V,2)
+    for i in 1:dsize[1]
+        for j in 1:dsize[2]
             X_ij = squeeze(covar[i,j,:], 1)'
             K[i,j] = (X_ij' * beta)[1,1]
             V[i,j] = sigma2 * (1 + (X_ij' * (XtX \ X_ij))[1,1])

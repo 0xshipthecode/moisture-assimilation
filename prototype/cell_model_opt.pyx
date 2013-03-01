@@ -165,7 +165,7 @@ cdef class CellMoistureModel:
                                 
             
                 # branch according to the currently active model
-                if r <= r0 and model_ids[i] != 4:
+                if r <= r0:
                     
                     # if drying/wetting model active, jacobian entry w.r.t. equilibrium and Tk is nonzero
                     if model_ids[i] != 4:

@@ -136,7 +136,7 @@ function main(args)
         else
             Xr[:,:,i] = v
         end
-        Xr[:,:,i] /= sum(Xr[:,:,i].^2)^0.5
+        Xr[:,:,i] = Xr[:,:,i] / sum(Xr[:,:,i].^2)^0.5
     end
     println("INFO: there are $Xd3 covariates (including model state).")
 
@@ -204,9 +204,6 @@ function main(args)
             m_at_obs = Float64[X[i, j, 1] for (i,j) in  ngp_list]
             m_na_at_obs = Float64[models_na[i,j].m_ext[2] for (i,j) in ngp_list]
             raws = Float64[obs_value(o) for o in obs_i]
-
-            println("Model @ obs at time $t is $m_at_obs.")
-            println("RAWS at time $t is $raws.")
 
             spush("model_raws_mae", mean(abs(m_at_obs - raws)))
             spush("model_na_raws_mae", mean(abs(m_na_at_obs - raws)))
