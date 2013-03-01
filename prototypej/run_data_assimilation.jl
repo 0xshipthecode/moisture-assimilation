@@ -49,6 +49,7 @@ function main(args)
     setup_tag("mt", true, true, true)
 
     setup_tag("fm10_model_state", false, false, false)
+    setup_tag("fm10_model_na_state", false, false, false)
     setup_tag("fm10_model_var", false, false, false)
 
     setup_tag("kriging_beta", true, true, true)
@@ -158,9 +159,11 @@ function main(args)
 
         # store the model state in an array (and store in output frame)
         fm10_model_state = [ models[i,j].m_ext[2] for i=1:dsize[1], j=1:dsize[2] ]
+        fm10_model_na_state = [ models_na[i,j].m_ext[2] for i=1:dsize[1], j=1:dsize[2] ]
         fm10_model_var = [ models[i,j].P[2,2] for i=1:dsize[1], j=1:dsize[2] ]
 
         spush("fm10_model_state", fm10_model_state)
+        spush("fm10_model_na_state", fm10_model_na_state)
         spush("fm10_model_var", fm10_model_var)
 
         # if observation data for this timepoint is available
