@@ -72,26 +72,7 @@ if __name__ == '__main__':
 
     print("Generating observation match for %d time points." % N)
 
-    # plot the raws, model values at obs points and kriging
-    plt.figure()
-    for i in range(N):
-        plt.clf()
-        di = data[i]
-        obs = di['kriging_obs']
-        ngp = di['kriging_obs_ngp']
-        m = [di['fm10_model_state'][p] for p in ngp]
-        m_na = [di['fm10_model_na_state'][p] for p in ngp]
-        kf = [di['kriging_field'][p] for p in ngp]
-        plt.plot(m, 'ro')
-        plt.plot(m_na, 'go')
-        plt.plot(obs, 'bo')
-        plt.plot(kf, 'ko')
-        plt.legend(['assim', 'no assim', 'raws', 'kriging'])
-        plt.ylabel('Fuel moisture [g]')
-        plt.savefig(os.path.join(path, "image_%03d.png" % i))
-
-
-    # gather all station ids
+    # gather all station ids that provide observations
     sids = {}
     for i in range(N):
         sobs = data[i]['kriging_obs_station_ids']
@@ -100,12 +81,51 @@ if __name__ == '__main__':
             if sid not in sids:
                 sids[sid] = ngp
 
+    # sort keys to obtain a plotting order
+    sids_list = sorted(sids.keys())
+    sids_ngp = [ sids[s] for s in sids_list ]
+    sids_pos = {}
+    for i in range(len(sids_list)):
+        sids_pos[sids_list[i]] = i
+
+    # plot the raws, model values at obs points and kriging
+    # plt.figure()
+    # for i in range(N):
+    #     plt.clf()
+    #     di = data[i]
+    #     dobs = di['kriging_obs']
+
+    #     # fill out observations we have for this frame
+    #     obs = np.zeros(len(sids_list))
+    #     obs[:] = float("nan")
+    #     for (s,j) in zip(di['kriging_obs_station_ids'],range(len(dobs))) :
+    #         obs[sids_pos[s]] = dobs[j]
+
+    #     m = [di['fm10_model_state'][p] for p in sids_ngp]
+    #     m_na = [di['fm10_model_na_state'][p] for p in sids_ngp]
+    #     kf = [di['kriging_field'][p] for p in sids_ngp]
+
+    #     plt.plot(m, 'ro')
+    #     plt.plot(m_na, 'go')
+    #     plt.plot(obs, 'bo')
+    #     plt.plot(kf, 'ko')
+    #     plt.xticks(np.arange(len(sids_pos)), sids_list, rotation = 90)
+    #     plt.legend(['assim', 'no assim', 'raws', 'kriging'])
+    #     plt.ylabel('Fuel moisture [g]')
+    #     plt.ylim(0.0, 0.6)
+    #     plt.savefig(os.path.join(path, "image_%03d.png" % i))
+
+
+
     print("Generating station plots for following stations:")
     print(sids.keys())
 
     plt.figure()
+        
+
     for sid,ngp in sids.iteritems():
         plt.clf()
+        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
 
         # gather all observations from this station
         obs = []
@@ -120,10 +140,13 @@ if __name__ == '__main__':
         m = [ data[j]['fm10_model_state'][ngp] for j in range(N) ]
         mna = [ data[j]['fm10_model_na_state'][ngp] for j in range(N) ]
         kfo = [ data[j]['kriging_field'][ngp] for j in range(N) ]
-        plt.plot(mt, m, 'r-')
-        plt.plot(mt, mna, 'g-')
-        plt.plot(mt, obs, 'bo')
-        plt.plot(mt, kfo, 'ko')
+        plt.plot(m, 'r-')
+        plt.plot(mna, 'g-')
+        plt.plot(obs, 'bo')
+        plt.plot(kfo, 'ko')
+        date_ndx = np.arange(0, N, N/20)
+        dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
+        plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
         plt.legend(['assim', 'no assim', 'raws', 'kriging'])
         plt.ylabel('Fuel moisture [g]')
         plt.savefig(os.path.join(path, "station_%s.png" % sid))
