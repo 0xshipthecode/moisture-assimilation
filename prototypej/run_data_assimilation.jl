@@ -119,6 +119,8 @@ function main(args)
     mresV = zeros(Float64, dsize)
     mid = zeros(Int32, dsize)
     Kg = zeros(Float64, (dsize[1], dsize[2], 9))
+    K = zeros(Float64, dsize)
+    V = zeros(Float64, dsize)
 
     println("INFO: time step from WRF is $dt s.")
 
@@ -201,6 +203,9 @@ function main(args)
             m_na_at_obs = Float64[fm10_model_na_state[p].m_ext[2] for p in ngp_list]
             raws = Float64[obs_value(o) for o in obs_i]
 
+            println("Model @ obs at time $t is $m_at_obs.")
+            println("RAWS at time $t is $raws.")
+
             spush("model_raws_mae", mean(abs(m_at_obs - raws)))
             spush("model_na_raws_mae", mean(abs(m_na_at_obs - raws)))
 
@@ -208,8 +213,8 @@ function main(args)
             spush("kriging_obs_station_ids", stat_ids)
             spush("kriging_obs_ngp", ngp_list)
 
-            # compute the kriging estimate
-            K, V = trend_surface_model_kriging(obs_i, X)
+            # compute the kriging estimates and fill in pre-allocated arrays
+            trend_surface_model_kriging(obs_i, X, K, V)
 
             # push diagnostic outputs
             spush("kriging_field", K)

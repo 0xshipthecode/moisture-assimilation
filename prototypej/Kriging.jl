@@ -22,7 +22,7 @@ function universal_kriging(obs, obs_stds, m, m_stds, wrf_data, t)
 end
 
 
-function trend_surface_model_kriging(obs_data, covar)
+function trend_surface_model_kriging(obs_data, covar, K, V)
     """
     Trend surface model kriging, which assumes spatially uncorrelated errors.
 
@@ -31,8 +31,6 @@ function trend_surface_model_kriging(obs_data, covar)
     """
     Nobs = length(obs_data)
     dsize = size(covar)[1:2]
-    K = zeros(dsize)
-    V = zeros(dsize)
     y = zeros((Nobs,1))
     X = zeros((Nobs, size(covar,3)))
 
@@ -52,7 +50,8 @@ function trend_surface_model_kriging(obs_data, covar)
     beta = XtX \ (X' * y)
     spush("kriging_beta", beta')
 
-    # compute kriging field and kriging variance
+    # compute kriging field and kriging variance and fill out
+    # the passed arrays
     for i in 1:size(V,1)
         for j in 1:size(V,2)
             X_ij = squeeze(covar[i,j,:], 1)'
@@ -60,9 +59,6 @@ function trend_surface_model_kriging(obs_data, covar)
             V[i,j] = sigma2 * (1 + (X_ij' * (XtX \ X_ij))[1,1])
         end
     end
-
-    # return the kriging field, the uncertainties and the observation vector y
-    return K, V
 
 end
 
