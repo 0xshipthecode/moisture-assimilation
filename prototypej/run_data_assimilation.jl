@@ -53,13 +53,18 @@ function main(args)
 
     setup_tag("kriging_beta", true, true, true)
     setup_tag("kriging_xtx_cond", true, true, true)
-    setup_tag("kriging_field_at_obs", false, false, false)
-    setup_tag("kriging_obs", false, false, false)
     setup_tag("kriging_field", false, false, false)
     setup_tag("kriging_variance", false, false, false)
 
     setup_tag("model_raws_mae", true, true, true)
     setup_tag("model_na_raws_mae", true, true, true)
+
+    # co-located model/model_na/kriging field/observation
+    setup_tag("kriging_obs", false, false, false)
+    setup_tag("model_at_obs", false, false, false)
+    setup_tag("model_na_at_obs", false, false, false)
+    setup_tag("kriging_field_at_obs", false, false, false)
+
 
     ### Load WRF output data
 
@@ -186,6 +191,8 @@ function main(args)
 
             spush("model_raws_mae", mean(abs(m_at_obs - raws)))
             spush("model_na_raws_mae", mean(abs(m_na_at_obs - raws)))
+            spush("model_at_obs", m_at_obs)
+            spush("model_na_at_obs", m_na_at_obs)
 
             # compute the kriging estimate
             K, V, y = trend_surface_model_kriging(obs_i, X)
