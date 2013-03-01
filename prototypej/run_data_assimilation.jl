@@ -104,9 +104,6 @@ function main(args)
 
     ### Initialize model
 
-    # maximum equilibrium moisture for visualization
-    maxE = cfg["maxE"]
-
     # construct initial conditions (FIXME: can we do better here?)
     E = squeeze(0.5 * (Ed[2,:,:] + Ew[2,:,:]), 1)
 
@@ -179,11 +176,16 @@ function main(args)
 
         # if observation data for this timepoint is available
         obs_i = Observation[]
-        tm_valid_now = filter(x -> abs((mt - x).millis) / 1000.0 < 30*60, obs_times)
-        if length(tm_valid_now) > 0
+        tm_valid_now = filter(x -> abs((mt - x).millis) / 1000.0 < 10*60, obs_times)
 
-            # gather all observations
-            for t in tm_valid_now append!(obs_i, obs_fm10[t]) end
+        # gather all observations
+        for t in tm_valid_now append!(obs_i, obs_fm10[t]) end
+
+        # exclude zero observations - must be sensor failure
+        obs_i = filter(x -> obs_value(x) > 0, obs_i)
+
+        # if there are no valid observations, continue with next time step, else run kriging
+        if length(obs_i) > 0
 
             # set the current fm10 model state as the covariate
             X[:,:,1] = fm10_model_state
@@ -199,8 +201,8 @@ function main(args)
             # store diagnostic information
             ngp_list = map(x -> nearest_grid_point(x), obs_i)
             stat_ids = map(x -> obs_station_id(x), obs_i)
-            m_at_obs = Float64[X[p[1], p[2], 1] for p in  ngp_list]
-            m_na_at_obs = Float64[fm10_model_na_state[p].m_ext[2] for p in ngp_list]
+            m_at_obs = Float64[X[i, j, 1] for (i,j) in  ngp_list]
+            m_na_at_obs = Float64[models_na[i,j].m_ext[2] for (i,j) in ngp_list]
             raws = Float64[obs_value(o) for o in obs_i]
 
             println("Model @ obs at time $t is $m_at_obs.")

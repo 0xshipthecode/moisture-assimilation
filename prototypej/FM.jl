@@ -52,8 +52,7 @@ function advance_model(c::FMModel, Ed::Float64, Ew::Float64,
     if r > c.r0
         equi[:] = c.S + dS
         model_ids[:] = 3
-        rlag[:] = 1.0 / (c.Trk + dTrk)
-                * (1.0 - exp(- (r - c.r0) / c.rk))
+        rlag[:] = 1.0 / (c.Trk + dTrk) * (1.0 - exp(- (r - c.r0) / c.rk))
     else
         model_ids[:] = 4
         for i in [1:k]
