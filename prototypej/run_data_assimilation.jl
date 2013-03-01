@@ -19,7 +19,7 @@ import Storage.setup_tag, Storage.spush, Storage.next_frame, Storage.flush_frame
 
 using Stations
 import Stations.Station, Stations.Observation, Stations.load_station_info,
-       Stations.load_station_data, Stations.build_observation_data, Stations.register_to_grid, Stations.nearest_grid_point, Stations.obs_value
+       Stations.load_station_data, Stations.build_observation_data, Stations.register_to_grid, Stations.nearest_grid_point, Stations.obs_value, Stations.obs_station_id
 
 using Kriging
 import Kriging.trend_surface_model_kriging
@@ -61,10 +61,8 @@ function main(args)
 
     # co-located model/model_na/kriging field/observation
     setup_tag("kriging_obs", false, false, false)
-    setup_tag("model_at_obs", false, false, false)
-    setup_tag("model_na_at_obs", false, false, false)
-    setup_tag("kriging_field_at_obs", false, false, false)
-
+    setup_tag("kriging_obs_station_ids", false, false, false)
+    setup_tag("kriging_obs_ngp", false, false, false)
 
     ### Load WRF output data
 
@@ -185,14 +183,17 @@ function main(args)
 
             # store diagnostic information
             ngp_list = map(x -> nearest_grid_point(x), obs_i)
+            stat_ids = map(x -> obs_station_id(x), obs_i)
             m_at_obs = Float64[X[p[1], p[2], 1] for p in  ngp_list]
             m_na_at_obs = Float64[models_na[p[1], p[2]].m_ext[2] for p in ngp_list]
             raws = Float64[obs_value(o) for o in obs_i]
 
             spush("model_raws_mae", mean(abs(m_at_obs - raws)))
             spush("model_na_raws_mae", mean(abs(m_na_at_obs - raws)))
-            spush("model_at_obs", m_at_obs)
-            spush("model_na_at_obs", m_na_at_obs)
+
+            spush("kriging_obs", raws)
+            spush("kriging_obs_station_ids", stat_ids)
+            spush("kriging_obs_ngp", ngp_list)
 
             # compute the kriging estimate
             K, V, y = trend_surface_model_kriging(obs_i, X)

@@ -42,8 +42,6 @@ function trend_surface_model_kriging(obs_data, covar)
         y[i] = obs_value(obs)
     end
 
-    spush("kriging_obs", y)
-
     # FIXME: we assume that the measurement variance is the same for
     # all stations at a particular time
     sigma2 = obs_variance(obs_data[1])
@@ -52,10 +50,7 @@ function trend_surface_model_kriging(obs_data, covar)
     XtX = X' * X
     spush("kriging_xtx_cond", cond(X' * X))
     beta = XtX \ (X' * y)
-    spush("kriging_beta", beta)
-
-    # push the kriging prediction at the observations
-    spush("kriging_field_at_obs", X * beta)
+    spush("kriging_beta", beta')
 
     # compute kriging field and kriging variance
     for i in 1:size(V,1)

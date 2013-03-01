@@ -145,10 +145,10 @@ function python_render_item(io::IO, k::String, v::Array)
     s = size(v)
     print(io, length(s) > 1 ? "np.reshape([" : "[")
     if length(v) > 0
-        @printf(io, "%f", v[1])
+        python_render_item(io, v[1])
         for i in v[2:]
             print(io, ", ")
-            @printf(io, "%f", i)
+            python_render_item(io, i)
         end
     end
     println(io, length(s) > 1 ? "], $s, order = 'F')" : "]")
@@ -158,8 +158,13 @@ end
 function python_render_item(io::IO, k::String, v::Any)
     show(io, k)
     print(io, " : ")
-    show(io, v)
+    python_render_item(io, v)
 end
+
+# specialize for floats which are otherwise printed with too many digits
+python_render_item(io::IO, f::Float64) = @printf(io, "%f", v[1])
+python_render_item(io::IO, f) = show(io, f)
+
 
 
 end

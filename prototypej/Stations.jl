@@ -66,6 +66,8 @@ end
 obs_variance(o::Observation) = o.var
 obs_value(o::Observation) = o.value
 obs_type(o::Observation) = o.obs_type
+obs_station(o::Observation) = o.station
+obs_station_id(o::Observation) = o.station.id
 nearest_grid_point(o::Observation) = o.station.ngp
 
 
