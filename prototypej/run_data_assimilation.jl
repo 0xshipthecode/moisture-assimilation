@@ -6,6 +6,7 @@
 #
 # 1. loads up a configuration file,
 # 2. obtains data from a WRF model,
+# 3. construct covariate vectors
 # 3. reads in observations and metadata for a list of stations,
 # 4. runs the moisture model and the assimilation mechanism.
 #
@@ -123,12 +124,14 @@ function main(args)
 
     # build static part of covariates
     covar_ids = cfg["static_covariates"]
-    covar_map = [ :lon => lon, :lat => lat, :elevation => hgt ]
+    covar_map = [ :lon => lon, :lat => lat, :elevation => hgt, :constant => ones(Float64, dsize) ]
     Xd3 = length(covar_ids) + 1                         
     X = zeros(Float64, (dsize[1], dsize[2], Xd3))
     for i in 2:Xd3
         v = covar_map[covar_ids[i-1]]
-        X[:,:,i] = v - mean(v)  # ensure zero mean for each covariate
+        if covar_ids[i-1] != :constant
+            X[:,:,i] = v - mean(v)  # ensure zero mean for each covariate (except for the constant)
+        end
     end
     println("INFO: there are $Xd3 covariates (including model state).")
 
