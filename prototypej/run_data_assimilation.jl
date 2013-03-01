@@ -198,7 +198,7 @@ function main(args)
             ngp_list = map(x -> nearest_grid_point(x), obs_i)
             stat_ids = map(x -> obs_station_id(x), obs_i)
             m_at_obs = Float64[X[p[1], p[2], 1] for p in  ngp_list]
-            m_na_at_obs = Float64[models_na[p[1], p[2]].m_ext[2] for p in ngp_list]
+            m_na_at_obs = Float64[fm10_model_na_state[p].m_ext[2] for p in ngp_list]
             raws = Float64[obs_value(o) for o in obs_i]
 
             spush("model_raws_mae", mean(abs(m_at_obs - raws)))
@@ -215,7 +215,7 @@ function main(args)
             spush("kriging_field", K)
             spush("kriging_variance", V)
 
-            # execute the krigin update at each model
+            # execute the Kalman update at each grid point
             Kp = zeros(1)
             Vp = zeros(1,1)
             fuel_types = [2]
@@ -229,8 +229,8 @@ function main(args)
 
             # move to the next storage frame
             next_frame()
-        end
-    end
+        end # if there is anything to assimilate
+    end # for each time point
 
     # Close down the storage system
     Storage.sclose()

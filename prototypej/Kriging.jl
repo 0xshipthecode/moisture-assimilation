@@ -62,7 +62,7 @@ function trend_surface_model_kriging(obs_data, covar)
     end
 
     # return the kriging field, the uncertainties and the observation vector y
-    return K, V, y
+    return K, V
 
 end
 

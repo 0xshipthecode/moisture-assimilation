@@ -53,8 +53,9 @@ if __name__ == '__main__':
 
     # plot the betas
     plt.figure()
-    for i in range(4):
-        plt.subplot(4, 1, i+1)
+    Nc  = beta.shape[1]
+    for i in range(Nc):
+        plt.subplot(Nc, 1, i+1)
         plt.plot(mt, beta[:,i])
         plt.ylabel('$\\beta_%d $ [-]' % (i+1))
 
