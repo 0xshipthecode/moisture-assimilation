@@ -97,7 +97,7 @@ if __name__ == '__main__':
         sngp = data[i]['kriging_obs_ngp']
         for sid,ngp in zip(sobs, sngp):
             if sid not in sids:
-                sids[sid] = sngp
+                sids[sid] = ngp
 
     print("Generating station plots for following stations:")
     print(sids.keys())
@@ -112,7 +112,7 @@ if __name__ == '__main__':
             dj = data[j]['kriging_obs_station_ids']
             if sid in dj:
                 ndx = dj.index(sid)
-                obs.append(dj[ndx])
+                obs.append(data[j]['kriging_obs'][ndx])
             else:
                 obs.append(float("nan"))
 
