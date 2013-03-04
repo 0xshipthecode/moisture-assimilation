@@ -189,7 +189,7 @@ function main(args)
 
         # if observation data for this timepoint is available
         obs_i = Observation[]
-        tm_valid_now = filter(x -> abs((mt - x).millis) / 1000.0 < 10*60, obs_times)
+        tm_valid_now = filter(x -> abs((mt - x).millis) / 1000.0 <= dt/2, obs_times)
 
         # gather all observations
         for t in tm_valid_now append!(obs_i, obs_fm10[t]) end
