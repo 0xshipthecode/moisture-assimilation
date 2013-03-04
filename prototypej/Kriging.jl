@@ -54,7 +54,7 @@ function trend_surface_model_kriging(obs_data, covar, K, V)
     # compute kriging field and kriging variance and fill out
     # the passed arrays
     for i in 1:dsize[1]
-        for j in 1:dsize[2]
+        @parallel for j in 1:dsize[2]
             X_ij = squeeze(covar[i,j,:], 1)'
             K[i,j] = (X_ij' * beta)[1,1]
             V[i,j] = sigma2 * (1 + (X_ij' * (XtX \ X_ij))[1,1])

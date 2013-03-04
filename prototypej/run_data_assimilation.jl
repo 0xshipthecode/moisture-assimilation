@@ -38,6 +38,9 @@ function main(args)
         println("Usage: julia run_data_assimilation.jl cfg_file")
         exit(1)
     end
+
+    t1 = Calendar.now()
+    println("INFO: run_data_assimilation.jl started on $t1")
     
     ### Read configuration file and setup the system
 
@@ -67,6 +70,8 @@ function main(args)
     setup_tag("kriging_obs_ngp", false, false, false)
 
     ### Load WRF output data
+    t1 = Calendar.now()
+    println("INFO: configuration complete, loading WRF data.")
 
     # read in data from the WRF output file pointed to by cfg
     w = WRF.load_wrf_data(cfg["wrf_output"], ["HGT"])
@@ -83,6 +88,9 @@ function main(args)
     Ed, Ew = WRF.field(w, "Ed"), WRF.field(w, "Ew")
     rain = WRF.field(w, "RAIN")
     hgt = WRF.field(w, "HGT")
+
+    t2 = Calendar.now()
+    println("INFO: WRF output loaded, sliced and diced [$(t2-t1)].")
 
     ### Load observation data from stations
     io = open(join([cfg["station_data_dir"], cfg["station_list_file"]], "/"), "r")
@@ -102,6 +110,9 @@ function main(args)
     obs_fm10 = build_observation_data(stations, "FM")
     obs_times = keys(obs_fm10)
 
+    t3 = Calendar.now()
+    println("INFO: Station data loaded and preprocessed [$(t3 - t2)].")
+
     ### Initialize model
 
     # construct initial conditions (FIXME: can we do better here?)
@@ -118,8 +129,6 @@ function main(args)
     Kg = zeros(Float64, (dsize[1], dsize[2], 9))
     K = zeros(Float64, dsize)
     V = zeros(Float64, dsize)
-
-    println("INFO: time step from WRF is $dt s.")
 
     # build static part of covariates
     covar_ids = cfg["static_covariates"]
@@ -139,6 +148,10 @@ function main(args)
         Xr[:,:,i] = Xr[:,:,i] / sum(Xr[:,:,i].^2)^0.5
     end
     println("INFO: there are $Xd3 covariates (including model state).")
+
+    t1 = Calendar.now()
+    println("INFO: starting simulation at $t1 ...")
+    println("INFO: time step from WRF is $dt s.")
 
     # construct model grid from fuel parameters
     Tk = [ 1.0, 10.0, 100.0 ]
@@ -238,6 +251,9 @@ function main(args)
 
     # Close down the storage system
     Storage.sclose()
+
+    t2 = Calendar.now()
+    println("INFO: simulation completed at $t2 after $(t2-t1).")
 
 end
 
