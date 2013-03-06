@@ -135,8 +135,11 @@ function kalman_update(c::FMModel, O::Vector{Float64},
     K = P * H' / (H * P * H' + V)
 
     # update the state
-    c.m_ext += K * (O - c.m_ext[fuel_types])
+    c.m_ext = c.m_ext + K * (O - c.m_ext[fuel_types])
     c.P -= K * H * P
+
+    # return the kalman update
+    return K[fuel_types]
 
 end
 

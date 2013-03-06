@@ -53,6 +53,7 @@ function main(args)
     setup_tag("mt", true, true, true)
 
     setup_tag("fm10_model_state", false, false, false)
+    setup_tag("fm10_model_state_assim", false, false, false)
     setup_tag("fm10_model_na_state", false, false, false)
     setup_tag("fm10_model_var", false, false, false)
 
@@ -62,12 +63,16 @@ function main(args)
     setup_tag("kriging_variance", false, false, false)
 
     setup_tag("model_raws_mae", true, true, true)
+    setup_tag("model_raws_mae_assim", true, true, true)
     setup_tag("model_na_raws_mae", true, true, true)
 
     # co-located model/model_na/kriging field/observation
     setup_tag("kriging_obs", false, false, false)
     setup_tag("kriging_obs_station_ids", false, false, false)
     setup_tag("kriging_obs_ngp", false, false, false)
+    setup_tag("kriging_errors", true, true, true)
+
+    setup_tag("kalman_gain_fm10", false, false, false)
 
     ### Load WRF output data
     t1 = Calendar.now()
@@ -88,6 +93,7 @@ function main(args)
     Ed, Ew = WRF.field(w, "Ed"), WRF.field(w, "Ew")
     rain = WRF.field(w, "RAIN")
     hgt = WRF.field(w, "HGT")
+    T = WRF.interpolated_field(w, "T2")
 
     t2 = Calendar.now()
     println("INFO: WRF output loaded, sliced and diced [$(t2-t1)].")
@@ -103,6 +109,7 @@ function main(args)
         s = load_station_info(join([cfg["station_data_dir"], string(sid, ".info")], "/"))
         load_station_data(s, join([cfg["station_data_dir"], string(sid, ".obs")], "/"))
 	register_to_grid(s, lat, lon)
+#        println("STATION: $(s.id), $(s.loc), ngp is $(s.ngp) with lat $(lat[s.ngp[1], s.ngp[2]]) and lon $(lon[s.ngp[1], s.ngp[2]]).")
         push!(stations, s)
     end
 
@@ -121,7 +128,6 @@ function main(args)
     # set up parameters
     Q = eye(9) * cfg["Q"]
     P0 = eye(9) * cfg["P0"]
-    dt = (wtm[2] - wtm[1]).millis / 1000
     mV = zeros(Float64, dsize)
     pred = zeros(Float64, dsize)
     mresV = zeros(Float64, dsize)
@@ -131,27 +137,38 @@ function main(args)
     V = zeros(Float64, dsize)
 
     # build static part of covariates
-    covar_ids = cfg["static_covariates"]
-    covar_map = [ :lon => lon, :lat => lat, :elevation => hgt,
-                  :constant => ones(Float64, dsize) ]
-    Xd3 = length(covar_ids) + 1                         
+    cov_ids = cfg["covariates"]
+    st_covar_map = [:lon => lon, :lat => lat, :elevation => hgt,
+                    :constant => ones(Float64, dsize) ]
+    dyn_covar_map = [:temperature => T]
+    Xd3 = length(cov_ids) + 1
     X = zeros(Float64, (dsize[1], dsize[2], Xd3))
     Xr = zeros(Float64, (dsize[1], dsize[2], Xd3))
     for i in 2:Xd3
-        v = covar_map[covar_ids[i-1]]
-        if covar_ids[i-1] != :constant
-            println("Removing mean of covariate $(covar_ids[i-1]).")
-            Xr[:,:,i] = v - mean(v)  # ensure zero mean for each covariate (except for the constant)
+        cov_id = cov_ids[i-1]
+        if has(st_covar_map, cov_id)
+            println("INFO: processing static covariate $cov_id.")
+            v = st_covar_map[cov_id]
+            if cov_id != :constant
+                println("INFO: removing mean of covariate $cov_id.")
+                Xr[:,:,i] = v - mean(v)  # ensure zero mean for each covariate (except for the constant)
+            else
+                Xr[:,:,i] = v
+            end
+            Xr[:,:,i] = Xr[:,:,i] / sum(Xr[:,:,i].^2)^0.5 # ensure each static covariate has norm 1
+        elseif has(dyn_covar_map, cov_id)
+            println("INFO: found dynamic covariate $(cov_id).")
         else
-            Xr[:,:,i] = v
+            error("ERROR: unknown covariate $(cov_id) encountered, fatal.")
         end
-        Xr[:,:,i] = Xr[:,:,i] / sum(Xr[:,:,i].^2)^0.5
     end
     println("INFO: there are $Xd3 covariates (including model state).")
 
     t1 = Calendar.now()
-    println("INFO: starting simulation at $t1 ...")
-    println("INFO: time step from WRF is $dt s.")
+    println("INFO: starting simulation at $t1 ...") 
+    dt = (wtm[2] - wtm[1]).millis / 1000
+    assim_time_win = cfg["assimilation_time_window"]
+    println("INFO: time step from WRF is $dt s, assimilation time window is $assim_time_win s.")
 
     # construct model grid from fuel parameters
     Tk = [ 1.0, 10.0, 100.0 ]
@@ -172,7 +189,7 @@ function main(args)
 
         # run the model update (in parallel if possible)
 	for i in 1:dsize[1]
-	    @parallel for j in 1:dsize[2]
+	    for j in 1:dsize[2]
 	        advance_model(models[i,j], Ed[t-1, i, j], Ew[t-1, i, j], rain[t-1, i, j], dt, Q)
 		advance_model(models_na[i,j], Ed[t-1, i, j], Ew[t-1, i, j], rain[t-1, i, j], dt, Q)
 	    end
@@ -189,10 +206,10 @@ function main(args)
 
         # if observation data for this timepoint is available
         obs_i = Observation[]
-        tm_valid_now = filter(x -> abs((mt - x).millis) / 1000.0 <= dt/2, obs_times)
+        tm_valid_now = filter(x -> abs((mt - x).millis) / 1000.0 <= assim_time_win/2, obs_times)
 
         # gather all observations
-        for t in tm_valid_now append!(obs_i, obs_fm10[t]) end
+        for tvn in tm_valid_now append!(obs_i, obs_fm10[tvn]) end
 
         # exclude zero observations - must be sensor failure
         obs_i = filter(x -> obs_value(x) > 0, obs_i)
@@ -202,13 +219,26 @@ function main(args)
 
             # set the current fm10 model state as the covariate
             X[:,:,1] = fm10_model_state
+            fm10_norm = sum(X[:,:,1].^2)^0.5
 
-            # scale each covariate to have approximately the same norm as fm10
-            # to improve condition number of X'*X
-            # FIXME: even better would be to precondition inside kriging
-            s = sum(X[:,:,1].^2)^0.5
+            println("INFO: assimilating $(length(obs_i)) obsevations, fm10 norm is $fm10_norm.")
+
+            # loop over dynamic covariates
             for i in 2:Xd3
-                X[:,:,i] = Xr[:,:,i] * s
+                cov_id = cov_ids[i-1]
+                if has(st_covar_map, cov_id)
+                    # just copy and rescale corresponding static covariate
+                    X[:,:,i] = Xr[:,:,i]
+                    X[:,:,i] *= fm10_norm
+                elseif has(dyn_covar_map, cov_id)
+                    # retrieve the field pointed to by the dynamic covariate id
+                    F = dyn_covar_map[cov_id]
+                    Ft = squeeze(F[t,:,:], 1)
+                    Ft -= mean(Ft)
+                    X[:,:,i] = Ft / sum(Ft.^2)^0.5 * fm10_norm
+                else
+                    error("FATAL: found unknown covariate.")
+                end
             end
 
             # store diagnostic information
@@ -235,17 +265,29 @@ function main(args)
             # execute the Kalman update at each grid point
             Kp = zeros(1)
             Vp = zeros(1,1)
+            Kg = zeros(Float64, dsize)
             fuel_types = [2]
             for i in 1:dsize[1]
-                @parallel for j in 1:dsize[2]
+                for j in 1:dsize[2]
                     Kp[1] = K[i,j]
                     Vp[1,1] = V[i,j]
-                    kalman_update(models[i,j], Kp, Vp, fuel_types)
+                    Kg[i,j] = kalman_update(models[i,j], Kp, Vp, fuel_types)[1,1]
+                    fm10_model_state[i,j] = models[i,j].m_ext[2]
                 end
             end
 
+            # push the fm10 model state after the assimilation
+            spush("fm10_model_state_assim", fm10_model_state)
+
+            # gather model values at ngp points after assimilation
+            m_at_obs = Float64[X[i, j, 1] for (i,j) in  ngp_list]
+            spush("model_raws_mae_assim", mean(abs(m_at_obs - raws)))
+
+            spush("kalman_gain_fm10", Kg)
+
             # move to the next storage frame
             next_frame()
+
         end # if there is anything to assimilate
     end # for each time point
 

@@ -87,6 +87,12 @@ function field(w::WRFData, fname)
     return w.fields[fname]
 end
 
+function interpolated_field(W::WRFData, fname)
+    F = field(W, fname)
+    N = size(F,1)
+    return 0.5 * (F[1:N-1,:,:] + F[2:N,:,:])
+end
+
 
 function compute_rainfall_per_hour(w::WRFData)
 

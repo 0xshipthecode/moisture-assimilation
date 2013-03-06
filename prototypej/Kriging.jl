@@ -23,7 +23,7 @@ end
 
 
 
-function trend_surface_model_kriging(obs_data, covar, K, V)
+function trend_surface_model_kriging(obs_data, X, K, V)
     """
     Trend surface model kriging, which assumes spatially uncorrelated errors.
 
@@ -31,14 +31,14 @@ function trend_surface_model_kriging(obs_data, covar, K, V)
     and the matrix V, which contains the kriging variance.
     """
     Nobs = length(obs_data)
-    dsize = size(covar)[1:2]
+    dsize = size(X)[1:2]
     y = zeros((Nobs,1))
-    X = zeros((Nobs, size(covar,3)))
+    Xobs = zeros((Nobs, size(X,3)))
 
     for (obs,i) in zip(obs_data, 1:Nobs)
-    	ngp = nearest_grid_point(obs)
-        X[i,:] = covar[ngp[1], ngp[2], :]
+    	p = nearest_grid_point(obs)
         y[i] = obs_value(obs)
+        Xobs[i,:] = X[p[1], p[2], :]
     end
 
     # FIXME: we assume that the measurement variance is the same for
@@ -46,18 +46,20 @@ function trend_surface_model_kriging(obs_data, covar, K, V)
     sigma2 = obs_variance(obs_data[1])
 
     # compute the OLS fit of the covariates to the observations
-    XtX = X' * X
+    XtX = Xobs' * Xobs
     spush("kriging_xtx_cond", cond(XtX))
-    beta = XtX \ (X' * y)
+    beta = XtX \ (Xobs' * y)
     spush("kriging_beta", beta')
+
+    spush("kriging_errors", (Xobs * beta - y)')
 
     # compute kriging field and kriging variance and fill out
     # the passed arrays
     for i in 1:dsize[1]
-        @parallel for j in 1:dsize[2]
-            X_ij = squeeze(covar[i,j,:], 1)'
+        for j in 1:dsize[2]
+            X_ij = squeeze(X[i,j,:], 1)'   # convert covariates at position i,j into a column vector
             K[i,j] = (X_ij' * beta)[1,1]
-            V[i,j] = sigma2 * (1 + (X_ij' * (XtX \ X_ij))[1,1])
+            V[i,j] = sigma2 * (1 + X_ij' * (XtX \ X_ij))[1,1]
         end
     end
 
