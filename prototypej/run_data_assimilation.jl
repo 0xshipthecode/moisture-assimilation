@@ -100,14 +100,14 @@ function main(args)
     println("INFO: WRF output loaded, sliced and diced [$(t2-t1)].")
 
     ### Load observation data from stations
-    io = open(join([cfg["station_data_dir"], cfg["station_list_file"]], "/"), "r")
+    io = open(join([cfg["station_info_dir"], cfg["station_info"]], "/"), "r")
     station_ids = filter(x -> x[1] != '#', map(x -> strip(x), readlines(io)))
     close(io)
 
     # load each station from its info and observation files
     stations = Station[]
     for sid in station_ids
-        s = load_station_info(join([cfg["station_data_dir"], string(sid, ".info")], "/"))
+        s = load_station_info(join([cfg["station_info_dir"], string(sid, ".info")], "/"))
         load_station_data(s, join([cfg["station_data_dir"], string(sid, ".obs")], "/"))
 	register_to_grid(s, lat, lon)
 #        println("STATION: $(s.id), $(s.loc), ngp is $(s.ngp) with lat $(lat[s.ngp[1], s.ngp[2]]) and lon $(lon[s.ngp[1], s.ngp[2]]).")
@@ -150,13 +150,12 @@ function main(args)
         if has(st_covar_map, cov_id)
             println("INFO: processing static covariate $cov_id.")
             v = st_covar_map[cov_id]
-            if cov_id != :constant
-                println("INFO: removing mean of covariate $cov_id.")
-                Xr[:,:,i] = v - mean(v)  # ensure zero mean for each covariate (except for the constant)
-            else
+#            if cov_id != :constant
+#                println("INFO: removing mean of covariate $cov_id.")
+#                Xr[:,:,i] = v - mean(v)  # ensure zero mean for each covariate (except for the constant)
+#            else
                 Xr[:,:,i] = v
-            end
-            Xr[:,:,i] = Xr[:,:,i] / sum(Xr[:,:,i].^2)^0.5 # ensure each static covariate has norm 1
+#            end
         elseif has(dyn_covar_map, cov_id)
             println("INFO: found dynamic covariate $(cov_id).")
         else
@@ -173,8 +172,8 @@ function main(args)
 
     # construct model grid from fuel parameters
     Tk = [ 1.0, 10.0, 100.0 ]
-    models = Array(FMModel, size(E))
-    models_na = Array(FMModel, size(E))
+    models = Array(FMModel, dsize)
+    models_na = Array(FMModel, dsize)
     for i in 1:dsize[1]
     	for j in 1:dsize[2]
             geo_loc = (lat[i,j], lon[i,j])
@@ -220,9 +219,8 @@ function main(args)
 
             # set the current fm10 model state as the covariate
             X[:,:,1] = fm10_model_state
-            fm10_norm = sum(X[:,:,1].^2)^0.5
 
-            println("INFO: assimilating $(length(obs_i)) obsevations, fm10 norm is $fm10_norm.")
+            println("INFO: assimilating $(length(obs_i)) obsevations.")
 
             # loop over dynamic covariates
             for i in 2:Xd3
@@ -230,13 +228,10 @@ function main(args)
                 if has(st_covar_map, cov_id)
                     # just copy and rescale corresponding static covariate
                     X[:,:,i] = Xr[:,:,i]
-                    X[:,:,i] *= fm10_norm
                 elseif has(dyn_covar_map, cov_id)
-                    # retrieve the field pointed to by the dynamic covariate id
+                    # retrieve the field pointed to by the dynamic covariate id, remove its mean
                     F = dyn_covar_map[cov_id]
                     Ft = squeeze(F[t,:,:], 1)
-                    Ft -= mean(Ft)
-                    X[:,:,i] = Ft / sum(Ft.^2)^0.5 * fm10_norm
                 else
                     error("FATAL: found unknown covariate.")
                 end

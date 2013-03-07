@@ -156,8 +156,10 @@ function load_station_data(s::Station, fname::String)
     # read observations, time is first (and in GMT), then one value per measurement or nan if not available
     while !eof(io)
 
-        # read the date
-        tm_str = strip(readline_skip_comments(io))
+        # read the date (if cannot read date, file is empty)
+        tm_line = readline_skip_comments(io)
+        if tm_line == nothing  break end
+        tm_str = strip(tm_line)
         tm = Calendar.parse("yyyy-MM-dd_HH:mm", tm_str, "GMT")
 
         # read in observed variables
@@ -207,8 +209,12 @@ end
 
 function readline_skip_comments(io :: IO)
     s = "#"
-    while length(s) == 0 || s[1] == '#'
-        s = readline(io)
+    while (length(s) == 0) || (s[1] == '#')
+        if !eof(io)
+            s = readline(io)
+        else
+            return nothing
+        end
     end
     return s
 end
