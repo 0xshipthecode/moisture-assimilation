@@ -94,6 +94,7 @@ function main(args)
     rain = WRF.field(w, "RAIN")
     hgt = WRF.field(w, "HGT")
     T = WRF.interpolated_field(w, "T2")
+    P = WRF.interpolated_field(w, "PSFC")
 
     t2 = Calendar.now()
     println("INFO: WRF output loaded, sliced and diced [$(t2-t1)].")
@@ -140,7 +141,7 @@ function main(args)
     cov_ids = cfg["covariates"]
     st_covar_map = [:lon => lon, :lat => lat, :elevation => hgt,
                     :constant => ones(Float64, dsize) ]
-    dyn_covar_map = [:temperature => T]
+    dyn_covar_map = [:temperature => T, :pressure => P, :rain => rain]
     Xd3 = length(cov_ids) + 1
     X = zeros(Float64, (dsize[1], dsize[2], Xd3))
     Xr = zeros(Float64, (dsize[1], dsize[2], Xd3))
@@ -272,15 +273,15 @@ function main(args)
                     Kp[1] = K[i,j]
                     Vp[1,1] = V[i,j]
                     Kg[i,j] = kalman_update(models[i,j], Kp, Vp, fuel_types)[1,1]
-                    fm10_model_state[i,j] = models[i,j].m_ext[2]
                 end
             end
 
             # push the fm10 model state after the assimilation
+            fm10_model_state = [ models[i,j].m_ext[2] for i=1:dsize[1], j=1:dsize[2] ]
             spush("fm10_model_state_assim", fm10_model_state)
 
             # gather model values at ngp points after assimilation
-            m_at_obs = Float64[X[i, j, 1] for (i,j) in  ngp_list]
+            m_at_obs = Float64[fm10_model_state[i, j] for (i,j) in  ngp_list]
             spush("model_raws_mae_assim", mean(abs(m_at_obs - raws)))
 
             spush("kalman_gain_fm10", Kg)

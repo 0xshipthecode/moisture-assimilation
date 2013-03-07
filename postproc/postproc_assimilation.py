@@ -6,10 +6,47 @@ import matplotlib.pyplot as plt
 import glob
 import os
 import cPickle
+from multiprocessing import Pool, Queue, Process
 
 from datetime import datetime
 
+num_workers = 16
 data = []
+
+
+def file_loader(x):
+    i, fname = x
+    with open(fname, "r") as f:
+        d = eval(f.read())
+    return (i, d)
+
+
+def plot_maker(jobs):
+    # reimport what we need for plotting
+    import matplotlib.pyplot as plt
+    plt.figure(figsize = (12,8))
+
+    while True:
+        # retrieve next assignment (or None if end of queue)
+        tmp = jobs.get()
+        if tmp == None:
+            break
+
+        # decode
+        (m, m_a, m_na, obs, kf, sids_pos, sids_list, fm_max, fname) = tmp
+        
+        plt.clf()
+        plt.plot(m, 'ro')
+        plt.plot(m_a, 'rs')
+        plt.plot(m_na, 'go')
+        plt.plot(obs, 'bo')
+        plt.plot(kf, 'ko')
+        plt.xticks(np.arange(len(sids_pos)), sids_list, rotation = 90)
+        plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
+        plt.ylabel('Fuel moisture [-]')
+        plt.xlim(-0.5, len(sids_pos) - 0.5)
+        plt.ylim(0.0, fm_max)
+        plt.savefig(fname)
 
 
 if __name__ == '__main__':
@@ -24,6 +61,8 @@ if __name__ == '__main__':
 
     print("Loading the output data.")
 
+    pool = Pool(16)
+
     # if a pickle object exists
 #    pickle_path = os.path.join(path, "_pickled_cache")
 #    if os.path.exists(pickle_path):
@@ -31,9 +70,18 @@ if __name__ == '__main__':
 #            data = cPickle.load(f)
 #    else:
         # open files in sequence and read the internals
-    for i in range(1, N+1):
-        with open(os.path.join(path, "frame%d" % i), "r") as f:
-            data.append(eval(f.read()))
+    # create a set of jobs to read in the files
+    data = [None] * N
+    read_job = [ (i, os.path.join(path, "frame%d" % i)) for i in range(1, N+1) ]
+    read_res = pool.map(file_loader, read_job)
+    for i,di in read_res:
+        data[i-1] = di
+
+    pool.close()
+
+#    for i in range(1, N+1):
+#        with open(os.path.join(path, "frame%d" % i), "r") as f:
+#            data.append(eval(f.read()))
 
         # pickle to cache future use
 #        with open(pickle_path, "w") as f:
@@ -56,12 +104,11 @@ if __name__ == '__main__':
     plt.figure()
     Nc  = beta.shape[1]
     for i in range(Nc):
-        plt.subplot(Nc, 1, i+1)
+        plt.clf()
         plt.plot(mt, beta[:,i])
         plt.ylabel('$\\beta_%d $ [-]' % (i+1))
-
-    plt.xlabel('Time [-]')
-    plt.savefig(os.path.join(path, "kriging_betas.png"))
+        plt.xlabel('Time [-]')
+        plt.savefig(os.path.join(path, "kriging_beta_%d.png" % (i+1)))
 
     # plot maes
     plt.figure()
@@ -102,10 +149,12 @@ if __name__ == '__main__':
     # artificially chop the max so that in case there are extreme values at least something is visible
     fm_max = min(fm_max, 0.6)
 
+    plot_queue = Queue()
+
     # plot the raws, model values at obs points and kriging
-    plt.figure(figsize = (12,8))
+#    plt.figure(figsize = (12,8))
     for i in range(N):
-        plt.clf()
+#        plt.clf()
         di = data[i]
         dobs = di['kriging_obs']
         Nobs = len(dobs)
@@ -120,18 +169,35 @@ if __name__ == '__main__':
         m_a = [di['fm10_model_state_assim'][p] for p in sids_ngp]
         m_na = [di['fm10_model_na_state'][p] for p in sids_ngp]
         kf = [di['kriging_field'][p] for p in sids_ngp]
+        fname = os.path.join(path, "image_%03d.png" % i)
 
-        plt.plot(m, 'ro')
-        plt.plot(m_a, 'rs')
-        plt.plot(m_na, 'go')
-        plt.plot(obs, 'bo')
-        plt.plot(kf, 'ko')
-        plt.xticks(np.arange(len(sids_pos)), sids_list, rotation = 90)
-        plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
-        plt.ylabel('Fuel moisture [g]')
-        plt.ylim(0.0, fm_max)
-        plt.savefig(os.path.join(path, "image_%03d.png" % i))
+        plot_queue.put((m, m_a, m_na, obs, kf, sids_pos, sids_list, fm_max, fname))
 
+        # plt.plot(m, 'ro')
+        # plt.plot(m_a, 'rs')
+        # plt.plot(m_na, 'go')
+        # plt.plot(obs, 'bo')
+        # plt.plot(kf, 'ko')
+        # plt.xticks(np.arange(len(sids_pos)), sids_list, rotation = 90)
+        # plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
+        # plt.ylabel('Fuel moisture [g]')
+        # plt.ylim(0.0, fm_max)
+        # plt.savefig(os.path.join(path, "image_%03d.png" % i))
+
+    # start up the workers and process the queue
+    workers = []
+    for i in range(num_workers): 
+        # end-of-queue marker (one for each worker)
+        plot_queue.put(None)
+
+        # create a new worker and add it to the pool
+        tmp = Process(target=plot_maker, args=(plot_queue,))
+        tmp.start()
+        workers.append(tmp)
+
+    # wait for workers to complete
+    for worker in workers:
+        worker.join()
 
     plt.figure(figsize = (12,8))
     for sid,ngp in sids.iteritems():
@@ -152,6 +218,8 @@ if __name__ == '__main__':
         m_a  = [ data[j]['fm10_model_state_assim'][ngp] for j in range(N) ]
         m_na = [ data[j]['fm10_model_na_state'][ngp] for j in range(N) ]
         kfo  = [ data[j]['kriging_field'][ngp] for j in range(N) ]
+        kv   = [ data[j]['kriging_variance'][ngp] for j in range(N) ]
+        mv   = [ data[j]['fm10_model_var'][ngp] for j in range(N) ]
         plt.plot(m, 'r--')
         plt.plot(m_a, 'r-')
         plt.plot(m_na, 'g-')
@@ -163,3 +231,12 @@ if __name__ == '__main__':
         plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
         plt.ylabel('Fuel moisture [g]')
         plt.savefig(os.path.join(path, "station_%s.png" % sid))
+
+        plt.clf()
+        plt.plot(np.log10(kv), 'ko')
+        plt.plot(np.log10(mv), 'ro')
+        plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+        plt.legend([ 'kriging var', 'model var' ])
+        plt.ylabel('Log10 variance')
+        plt.savefig(os.path.join(path, "station_%s_var.png" % sid))
+
