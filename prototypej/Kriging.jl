@@ -27,6 +27,8 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     """
     Trend surface model kriging, which assumes spatially uncorrelated errors.
 
+    WARNING: The variable X is clobbered.
+
     The kriging results in the matrix K, which contains the kriged observations
     and the matrix V, which contains the kriging variance.
     """
@@ -43,14 +45,15 @@ function trend_surface_model_kriging(obs_data, X, K, V)
         Xobs[i,:] = X[p[1], p[2], :]
     end
 
-    # rescale columns of Xobs to have the same norm to reduce
-    # the condition number of X'X cheaply
+    # rescale columns of Xobs (and X itself) to have the same norm to reduce
+    # the condition number of Xobs'Xobs cheaply
     sc = zeros(Float64, Ncov)
     sc[1] = 1.0
     fm10_norm = sum(Xobs[:,1].^2)^0.5
     for i in 2:Ncov
         sc[i] = fm10_norm / sum(Xobs[:,i].^2)^0.5
         Xobs[:,i] *= sc[i]
+        X[:,:,i] *= sc[i]
     end
 
     # FIXME: we assume that the measurement variance is the same for
@@ -63,8 +66,6 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     beta = XtX \ (Xobs' * y)
     spush("kriging_errors", (Xobs * beta - y)')
 
-    # rescale beta back to the original data (in X)
-    beta = beta .* sc
     spush("kriging_beta", beta)
 
     # compute kriging field and kriging variance and fill out
