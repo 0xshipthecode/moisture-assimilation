@@ -150,12 +150,7 @@ function main(args)
         if has(st_covar_map, cov_id)
             println("INFO: processing static covariate $cov_id.")
             v = st_covar_map[cov_id]
-#            if cov_id != :constant
-#                println("INFO: removing mean of covariate $cov_id.")
-#                Xr[:,:,i] = v - mean(v)  # ensure zero mean for each covariate (except for the constant)
-#            else
-                Xr[:,:,i] = v
-#            end
+            Xr[:,:,i] = v
         elseif has(dyn_covar_map, cov_id)
             println("INFO: found dynamic covariate $(cov_id).")
         else
@@ -219,7 +214,7 @@ function main(args)
 
             # set the current fm10 model state as the covariate
             X[:,:,1] = fm10_model_state
-
+#            fm10_norm = sum(fm10_model_state.^2)^0.5
             println("INFO: assimilating $(length(obs_i)) obsevations.")
 
             # loop over dynamic covariates
@@ -227,11 +222,14 @@ function main(args)
                 cov_id = cov_ids[i-1]
                 if has(st_covar_map, cov_id)
                     # just copy and rescale corresponding static covariate
+#                    X[:,:,i] = Xr[:,:,i] / sum(Xr[:,:,i].^2)^0.5 * fm10_norm
                     X[:,:,i] = Xr[:,:,i]
                 elseif has(dyn_covar_map, cov_id)
-                    # retrieve the field pointed to by the dynamic covariate id, remove its mean
+                    # retrieve the field pointed to by the dynamic covariate id
                     F = dyn_covar_map[cov_id]
-                    Ft = squeeze(F[t,:,:], 1)
+#                    F = squeeze(F[t,:,:], 1)
+#                    X[:,:,i] = F / sum(F.^2)^0.5 * fm10_norm
+                    X[:,:,i] = squeeze(F[t,:,:], 1)
                 else
                     error("FATAL: found unknown covariate.")
                 end

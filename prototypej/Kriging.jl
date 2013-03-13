@@ -43,13 +43,14 @@ function trend_surface_model_kriging(obs_data, X, K, V)
         Xobs[i,:] = X[p[1], p[2], :]
     end
 
-    # rescale columns of X to match the norm of the first column
-    s = sum(Xobs[:,1].^2)^0.5
-    sc = zeros(Ncov)
+    # rescale columns of Xobs to have the same norm to reduce
+    # the condition number of X'X cheaply
+    sc = zeros(Float64, Ncov)
     sc[1] = 1.0
+    fm10_norm = sum(Xobs[:,1].^2)^0.5
     for i in 2:Ncov
-        sc[i] = s / sum(Xobs[:,i].^2)^0.5
-        Xobs[:,i] = Xobs[:,i] * sc[i]
+        sc[i] = fm10_norm / sum(Xobs[:,i].^2)^0.5
+        Xobs[:,i] *= sc[i]
     end
 
     # FIXME: we assume that the measurement variance is the same for
@@ -60,20 +61,19 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     XtX = Xobs' * Xobs
     spush("kriging_xtx_cond", cond(XtX))
     beta = XtX \ (Xobs' * y)
-    spush("kriging_beta", beta')
-
     spush("kriging_errors", (Xobs * beta - y)')
 
-    # now we must rescale beta back to be compatible with original scales
+    # rescale beta back to the original data (in X)
     beta = beta .* sc
+    spush("kriging_beta", beta)
 
     # compute kriging field and kriging variance and fill out
     # the passed arrays
     for i in 1:dsize[1]
         for j in 1:dsize[2]
             X_ij = squeeze(X[i,j,:], 1)'   # convert covariates at position i,j into a column vector
-            K[i,j] = (X_ij' * beta)[1,1]
-            V[i,j] = sigma2 * (1 + X_ij' * (XtX \ X_ij))[1,1]
+            K[i,j] = dot(vec(X_ij), vec(beta))
+            V[i,j] = sigma2 * (1 + dot(vec(X_ij), vec(XtX \ X_ij)))
         end
     end
 
