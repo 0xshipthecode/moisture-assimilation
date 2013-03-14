@@ -102,7 +102,7 @@ if __name__ == "__main__":
                 # remove unavailable measurments
                 var_list, obs_list = zip(*obs[tm])
                 obs_var = [ obs_var_tbl[x] if x in obs_var_tbl else float("nan") for x in var_list ]
-                f.write(tm.astimezone(gmt_tz).strftime('%Y-%m-%d_%H:%M %Z'))
+                f.write(tm.strftime('%Y-%m-%d_%H:%M %Z'))
                 f.write('\n')
                 f.write(string.join(map(str, var_list), ", "))
                 f.write('\n')
