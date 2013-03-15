@@ -93,12 +93,14 @@ if __name__ == '__main__':
     beta = np.zeros((N, np.prod(data[0]['kriging_beta'].shape)))
     maes = np.zeros((N, 3))
     mt = []
+    ks2 = np.zeros(N)
     for i in range(N):
         mt.append(data[i]['mt'])
         beta[i,:] = data[i]['kriging_beta'][0,:]
         maes[i,0] = data[i]['model_raws_mae']
         maes[i,1] = data[i]['model_raws_mae_assim']
         maes[i,2] = data[i]['model_na_raws_mae']
+        ks2[i] = data[i]['kriging_sigma2_eta']
 
     # plot the betas
     plt.figure()
@@ -113,10 +115,19 @@ if __name__ == '__main__':
     # plot maes
     plt.figure()
     plt.plot(mt, maes)
-    plt.legend(['pre-assim', 'post-assim', 'no assim'])
+    plt.legend(['forecast', 'analysis', 'no assim'])
     plt.ylabel('Mean abs difference [g]')
     plt.xlabel('Time [-]')
     plt.savefig(os.path.join(path, "model_maes.png"))
+
+    # plot the etas
+    plt.figure()
+    plt.plot(mt, ks2)
+    plt.ylabel('Kriging eta variance [-]')
+    plt.xlabel('Time [-]')
+    plt.savefig(os.path.join(path, "eta_variance.png"))
+    
+    
 
     print("Generating observation/model matchups for %d time points." % N)
 
@@ -193,7 +204,7 @@ if __name__ == '__main__':
         
     plt.plot(err_variance)
     plt.title('Variance of model error vs. time')
-    plt.ylabel('Error variance [-]')
+    plt.ylabel('Kriging Error variance [-]')
     plt.xlabel('Time')
     date_ndx = np.arange(0, N, N/20)
     dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
