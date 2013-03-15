@@ -184,6 +184,23 @@ if __name__ == '__main__':
         # plt.ylim(0.0, fm_max)
         # plt.savefig(os.path.join(path, "image_%03d.png" % i))
 
+
+    plt.figure(figsize=(12,8))
+    err_variance = []
+    for i in range(N):
+        err_i = data[i]['kriging_errors']
+        err_variance.append(1.0 / len(err_i) * np.sum(err_i ** 2))
+        
+    plt.plot(err_variance)
+    plt.title('Variance of model error vs. time')
+    plt.ylabel('Error variance [-]')
+    plt.xlabel('Time')
+    date_ndx = np.arange(0, N, N/20)
+    dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
+    plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+    plt.savefig(os.path.join(path, "error_variance.png"))
+        
+
     # start up the workers and process the queue
     workers = []
     for i in range(num_workers): 

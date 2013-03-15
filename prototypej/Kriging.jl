@@ -15,14 +15,6 @@ using Storage
 import Storage.spush
 
 
-function universal_kriging(obs, obs_stds, m, m_stds, wrf_data, t)
-
-# Universal kriging not implemented yet
-
-end
-
-
-
 function trend_surface_model_kriging(obs_data, X, K, V)
     """
     Trend surface model kriging, which assumes spatially uncorrelated errors.
@@ -40,6 +32,13 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     Xobs = zeros(Nobs, Ncov)
     m_var = zeros(Nobs)
 
+    # quick pre-conditioning hack
+    # rescale all X[:,:,i] to have norm of X[:,:,1]
+    n1 = sum(X[:,:,1].^2)^0.5
+    for i in 2:Ncov
+        X[:,:,i] *= n1 / sum(X[:,:,i].^2)^0.5
+    end
+
     for (obs,i) in zip(obs_data, 1:Nobs)
     	p = nearest_grid_point(obs)
         y[i] = obs_value(obs)
@@ -52,31 +51,38 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     s2_eta_hat = 0.0
 
     i = 0
-    while abs(s2_eta_hat_old - s2_eta_hat) > 1e-5
+    subzeros = 0
+    while abs(s2_eta_hat_old - s2_eta_hat) > 1e-4
     
-        s2_eta_hat = s2_eta_hat_old
+        s2_eta_hat_old = s2_eta_hat
         Sigma = diagm(m_var) + s2_eta_hat * eye(Nobs)
         SigInv = inv(Sigma)
         XtSX = Xobs' * SigInv * Xobs
-        beta = XtSX \ Xobs' * SigInv * Xobs
+        beta = XtSX \ Xobs' * SigInv * y
         res = y - Xobs * beta
         s2_eta_hat = 1.0 / (Nobs - Ncov) * sum(max(res.^2 - m_var, 0))
+        subzeros = sum(res.^2 - m_var .< 0)
         i += 1
+        println("Iter: $i  old $s2_eta_hat_old  new $s2_eta_hat")
     end
 
-    # use the last s2_eta_hat for our estimate
+    # construct new covariance with last s2_eta_hat
     Sigma = s2_eta_hat * eye(Nobs) + diagm(m_var)
     SigInv = inv(Sigma)
 
+    # estimate the beta trend parameters
+    XtSX = Xobs' * SigInv * Xobs
+    beta = XtSX \ (Xobs' * SigInv * y)
+
     # compute the OLS fit of the covariates to the observations
     spush("kriging_xtx_cond", cond(XtSX))
-    beta = XtSX \ (Xobs' * SigInv * y)
     spush("kriging_errors", (Xobs * beta - y)')
-
     spush("kriging_beta", beta)
+    spush("kriging_sigma2_eta", s2_eta_hat)
+    spush("kriging_iters", i)
+    spush("kriging_subzero_s2_estimates", subzeros)
 
-    # compute kriging field and kriging variance and fill out
-    # the passed arrays
+    # compute kriging field and kriging variance 
     for i in 1:dsize[1]
         for j in 1:dsize[2]
             x_ij = squeeze(X[i,j,:], 1)'   # convert covariates at position i,j into a column vector
