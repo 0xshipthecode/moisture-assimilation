@@ -38,32 +38,39 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     dsize = size(X)[1:2]
     y = zeros((Nobs,1))
     Xobs = zeros(Nobs, Ncov)
+    m_var = zeros(Nobs)
 
     for (obs,i) in zip(obs_data, 1:Nobs)
     	p = nearest_grid_point(obs)
         y[i] = obs_value(obs)
         Xobs[i,:] = X[p[1], p[2], :]
+        m_var[i] = obs_variance(obs)
     end
 
-    # rescale columns of Xobs (and X itself) to have the same norm to reduce
-    # the condition number of Xobs'Xobs cheaply
-    sc = zeros(Float64, Ncov)
-    sc[1] = 1.0
-    fm10_norm = sum(Xobs[:,1].^2)^0.5
-    for i in 2:Ncov
-        sc[i] = fm10_norm / sum(Xobs[:,i].^2)^0.5
-        Xobs[:,i] *= sc[i]
-        X[:,:,i] *= sc[i]
+    # initialize iterative algorithm
+    s2_eta_hat_old = -10.0
+    s2_eta_hat = 0.0
+
+    i = 0
+    while abs(s2_eta_hat_old - s2_eta_hat) > 1e-5
+    
+        s2_eta_hat = s2_eta_hat_old
+        Sigma = diagm(m_var) + s2_eta_hat * eye(Nobs)
+        SigInv = inv(Sigma)
+        XtSX = Xobs' * SigInv * Xobs
+        beta = XtSX \ Xobs' * SigInv * Xobs
+        res = y - Xobs * beta
+        s2_eta_hat = 1.0 / (Nobs - Ncov) * sum(max(res.^2 - m_var, 0))
+        i += 1
     end
 
-    # FIXME: we assume that the measurement variance is the same for
-    # all stations at a particular time
-    sigma2 = obs_variance(obs_data[1])
+    # use the last s2_eta_hat for our estimate
+    Sigma = s2_eta_hat * eye(Nobs) + diagm(m_var)
+    SigInv = inv(Sigma)
 
     # compute the OLS fit of the covariates to the observations
-    XtX = Xobs' * Xobs
-    spush("kriging_xtx_cond", cond(XtX))
-    beta = XtX \ (Xobs' * y)
+    spush("kriging_xtx_cond", cond(XtSX))
+    beta = XtSX \ (Xobs' * SigInv * y)
     spush("kriging_errors", (Xobs * beta - y)')
 
     spush("kriging_beta", beta)
@@ -72,9 +79,9 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     # the passed arrays
     for i in 1:dsize[1]
         for j in 1:dsize[2]
-            X_ij = squeeze(X[i,j,:], 1)'   # convert covariates at position i,j into a column vector
-            K[i,j] = dot(vec(X_ij), vec(beta))
-            V[i,j] = sigma2 * (1 + dot(vec(X_ij), vec(XtX \ X_ij)))
+            x_ij = squeeze(X[i,j,:], 1)'   # convert covariates at position i,j into a column vector
+            K[i,j] = dot(vec(x_ij), vec(beta))
+            V[i,j] = s2_eta_hat + dot(vec(x_ij), vec(XtSX \ x_ij))
         end
     end
 
