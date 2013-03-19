@@ -52,7 +52,7 @@ function trend_surface_model_kriging(obs_data, X, K, V)
 
     i = 0
     subzeros = 0
-    while abs(s2_eta_hat_old - s2_eta_hat) > 1e-4
+    while abs( (s2_eta_hat_old - s2_eta_hat) / max(s2_eta_hat_old, s2_eta_hat) > 1e-3 )
     
         s2_eta_hat_old = s2_eta_hat
         Sigma = diagm(m_var) + s2_eta_hat * eye(Nobs)
@@ -60,7 +60,8 @@ function trend_surface_model_kriging(obs_data, X, K, V)
         XtSX = Xobs' * SigInv * Xobs
         beta = XtSX \ Xobs' * SigInv * y
         res = y - Xobs * beta
-        s2_eta_hat = 1.0 / (Nobs - Ncov) * sum(max(res.^2 - m_var, 0))
+
+        s2_eta_hat = sum(res.^2 / (Nobs - Ncov) - m_var / Nobs)
         subzeros = sum(res.^2 - m_var .< 0)
         i += 1
         println("Iter: $i  old $s2_eta_hat_old  new $s2_eta_hat")
