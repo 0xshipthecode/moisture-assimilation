@@ -25,20 +25,29 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     and the matrix V, which contains the kriging variance.
     """
     Nobs = length(obs_data)
-    Ncov = size(X,3)
+    Ncov_all = size(X,3)
 
     dsize = size(X)[1:2]
     y = zeros((Nobs,1))
-    Xobs = zeros(Nobs, Ncov)
     m_var = zeros(Nobs)
 
     # quick pre-conditioning hack
     # rescale all X[:,:,i] to have norm of X[:,:,1]
-    n1 = sum(X[:,:,1].^2)^0.5
-    for i in 2:Ncov
-        X[:,:,i] *= n1 / sum(X[:,:,i].^2)^0.5
+    norm_1 = sum(X[:,:,1].^2)^0.5
+    cov_ids = [1]
+    for i in 2:Ncov_all
+        norm_i = sum(X[:,:,i].^2)^0.5
+        if norm_i > 0.0
+            X[:,:,i] *= norm_1 / norm_i
+            push!(cov_ids, i)
+        end
     end
 
+    # if we have zero covariates, we must exclude them or a singular exception will be thron by \
+    Ncov = length(cov_ids)
+    X = X[:,:,cov_ids]
+
+    Xobs = zeros(Nobs, Ncov)
     for (obs,i) in zip(obs_data, 1:Nobs)
     	p = nearest_grid_point(obs)
         y[i] = obs_value(obs)
@@ -52,15 +61,17 @@ function trend_surface_model_kriging(obs_data, X, K, V)
 
     i = 0
     subzeros = 0
-    while abs( (s2_eta_hat_old - s2_eta_hat) / max(s2_eta_hat_old, s2_eta_hat)) > 1e-3
+    while abs( (s2_eta_hat_old - s2_eta_hat) / max(s2_eta_hat_old, s2_eta_hat)) > 1e-2
     
+        # shift current estimate to old var
         s2_eta_hat_old = s2_eta_hat
+
+        # recompute the covariance matrix
         Sigma = diagm(m_var) + s2_eta_hat * eye(Nobs)
-        SigInv = inv(Sigma)
-        XtSX = Xobs' * SigInv * Xobs
-        beta = XtSX \ Xobs' * SigInv * y
+        XtSX = Xobs' * (Sigma \ Xobs)
+        beta = XtSX \ Xobs' * (Sigma \ y)
         res = y - Xobs * beta
-        
+
         # compute new estimate of variance of microscale variability
         s2_array = res.^2 - m_var
         for j in 1:Nobs
@@ -75,16 +86,21 @@ function trend_surface_model_kriging(obs_data, X, K, V)
 
     # construct new covariance with last s2_eta_hat
     Sigma = s2_eta_hat * eye(Nobs) + diagm(m_var)
-    SigInv = inv(Sigma)
 
     # estimate the beta trend parameters
-    XtSX = Xobs' * SigInv * Xobs
-    beta = XtSX \ (Xobs' * SigInv * y)
+    XtSX = Xobs' * (Sigma \ Xobs)
+    beta = XtSX \ (Xobs' * (Sigma \ y))
 
     # compute the OLS fit of the covariates to the observations
     spush("kriging_xtx_cond", cond(XtSX))
     spush("kriging_errors", (Xobs * beta - y)')
-    spush("kriging_beta", beta)
+
+    # printing construction that makes sure order of printed betas does not vary
+    # across times even if there are zero covariates
+    beta_ext = ones((Ncov_all,1)) * NaN
+    beta_ext[cov_ids] = beta
+    spush("kriging_beta", beta_ext)
+
     spush("kriging_sigma2_eta", s2_eta_hat)
     spush("kriging_iters", i)
     spush("kriging_subzero_s2_estimates", subzeros)

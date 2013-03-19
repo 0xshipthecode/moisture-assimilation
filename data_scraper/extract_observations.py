@@ -99,16 +99,18 @@ if __name__ == "__main__":
             f.write("# Data file generated on %s by extract_observations.py\n" % str(datetime.now()))
             f.write("# Format is time, observed_vars, observations, variances\n")
             for tm in sorted(obs.keys()):
-                # remove unavailable measurments
-                var_list, obs_list = zip(*obs[tm])
-                obs_var = [ obs_var_tbl[x] if x in obs_var_tbl else float("nan") for x in var_list ]
-                f.write(tm.strftime('%Y-%m-%d_%H:%M %Z'))
-                f.write('\n')
-                f.write(string.join(map(str, var_list), ", "))
-                f.write('\n')
-                f.write(string.join(map(str, obs_list), ", "))
-                f.write('\n')
-                f.write(string.join(map(str, obs_var), ", "))
-                f.write('\n')
+                # sometimes stations need not supply a single measurement at a given time, then zip() fails
+                if len(obs[tm]) > 0:
+                    # remove unavailable measurments
+                    var_list, obs_list = zip(*obs[tm])
+                    obs_var = [ obs_var_tbl[x] if x in obs_var_tbl else float("nan") for x in var_list ]
+                    f.write(tm.strftime('%Y-%m-%d_%H:%M %Z'))
+                    f.write('\n')
+                    f.write(string.join(map(str, var_list), ", "))
+                    f.write('\n')
+                    f.write(string.join(map(str, obs_list), ", "))
+                    f.write('\n')
+                    f.write(string.join(map(str, obs_var), ", "))
+                    f.write('\n')
 
 

@@ -81,10 +81,10 @@ function main(args)
     println("INFO: configuration complete, loading WRF data.")
 
     # read in data from the WRF output file pointed to by cfg
-    w = WRF.load_wrf_data(cfg["wrf_output"], ["HGT"])
+    w = WRF.load_wrf_data(cfg["wrf_output"], ASCIIString[])
 
     # the terrain height need not be stored for all time points
-    WRF.slice_field(w, "HGT")
+#    WRF.slice_field(w, "HGT")
 
     # extract WRF fields
     lat, lon = WRF.lat(w), WRF.lon(w)
@@ -94,7 +94,7 @@ function main(args)
     # retrieve equilibria and rain
     Ed, Ew = WRF.field(w, "Ed"), WRF.field(w, "Ew")
     rain = WRF.field(w, "RAIN")
-    hgt = WRF.field(w, "HGT")
+#    hgt = WRF.field(w, "HGT")
     T = WRF.interpolated_field(w, "T2")
     P = WRF.interpolated_field(w, "PSFC")
 
@@ -141,7 +141,9 @@ function main(args)
 
     # build static part of covariates
     cov_ids = cfg["covariates"]
-    st_covar_map = [:lon => lon, :lat => lat, :elevation => hgt,
+    st_covar_map = [:lon => lon,
+                    :lat => lat,
+#                    :elevation => hgt,
                     :constant => ones(Float64, dsize) ]
     dyn_covar_map = [:temperature => T, :pressure => P, :rain => rain]
     Xd3 = length(cov_ids) + 1
@@ -224,13 +226,10 @@ function main(args)
                 cov_id = cov_ids[i-1]
                 if has(st_covar_map, cov_id)
                     # just copy and rescale corresponding static covariate
-#                    X[:,:,i] = Xr[:,:,i] / sum(Xr[:,:,i].^2)^0.5 * fm10_norm
                     X[:,:,i] = Xr[:,:,i]
                 elseif has(dyn_covar_map, cov_id)
                     # retrieve the field pointed to by the dynamic covariate id
                     F = dyn_covar_map[cov_id]
-#                    F = squeeze(F[t,:,:], 1)
-#                    X[:,:,i] = F / sum(F.^2)^0.5 * fm10_norm
                     X[:,:,i] = squeeze(F[t,:,:], 1)
                 else
                     error("FATAL: found unknown covariate.")

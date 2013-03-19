@@ -102,29 +102,37 @@ if __name__ == '__main__':
         maes[i,2] = data[i]['model_na_raws_mae']
         ks2[i] = data[i]['kriging_sigma2_eta']
 
+    # prepare dates for x axis of time plots
+    date_ndx = np.arange(0, N, N/20)
+    dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
+
     # plot the betas
-    plt.figure()
+    plt.figure(figsize=(12,8))
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
     Nc  = beta.shape[1]
     for i in range(Nc):
         plt.clf()
-        plt.plot(mt, beta[:,i])
+        plt.plot(beta[:,i])
         plt.ylabel('$\\beta_%d $ [-]' % (i+1))
         plt.xlabel('Time [-]')
+        plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
         plt.savefig(os.path.join(path, "kriging_beta_%d.png" % (i+1)))
 
     # plot maes
-    plt.figure()
-    plt.plot(mt, maes)
+    plt.clf()
+    plt.plot(maes)
     plt.legend(['forecast', 'analysis', 'no assim'])
     plt.ylabel('Mean abs difference [g]')
     plt.xlabel('Time [-]')
+    plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
     plt.savefig(os.path.join(path, "model_maes.png"))
 
     # plot the etas
-    plt.figure()
-    plt.plot(mt, ks2)
+    plt.clf()
+    plt.plot(ks2)
     plt.ylabel('Kriging eta variance [-]')
     plt.xlabel('Time [-]')
+    plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
     plt.savefig(os.path.join(path, "eta_variance.png"))
     
     
@@ -197,6 +205,7 @@ if __name__ == '__main__':
 
 
     plt.figure(figsize=(12,8))
+    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
     err_variance = []
     for i in range(N):
         err_i = data[i]['kriging_errors']
