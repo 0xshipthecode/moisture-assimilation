@@ -52,7 +52,7 @@ function trend_surface_model_kriging(obs_data, X, K, V)
 
     i = 0
     subzeros = 0
-    while abs( (s2_eta_hat_old - s2_eta_hat) / max(s2_eta_hat_old, s2_eta_hat) > 1e-3 )
+    while abs( (s2_eta_hat_old - s2_eta_hat) / max(s2_eta_hat_old, s2_eta_hat)) > 1e-3
     
         s2_eta_hat_old = s2_eta_hat
         Sigma = diagm(m_var) + s2_eta_hat * eye(Nobs)
@@ -60,9 +60,15 @@ function trend_surface_model_kriging(obs_data, X, K, V)
         XtSX = Xobs' * SigInv * Xobs
         beta = XtSX \ Xobs' * SigInv * y
         res = y - Xobs * beta
+        
+        # compute new estimate of variance of microscale variability
+        s2_array = res.^2 - m_var
+        for j in 1:Nobs
+            s2_array[j] += dot(vec(Xobs[j,:]), vec(XtSX \ Xobs[j,:]'))
+        end
+        s2_eta_hat = sum(s2_array) / Nobs
 
-        s2_eta_hat = sum(res.^2 / (Nobs - Ncov) - m_var / Nobs)
-        subzeros = sum(res.^2 - m_var .< 0)
+        subzeros = sum(s2_array .< 0)
         i += 1
         println("Iter: $i  old $s2_eta_hat_old  new $s2_eta_hat")
     end
