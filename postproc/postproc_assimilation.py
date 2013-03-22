@@ -66,7 +66,7 @@ def field_plot_maker(jobs):
         (f, title, fname) = tmp
         
         plt.clf()
-        plt.imshow(f[::-1,:], 'ro')
+        plt.imshow(f[::-1,:])
         plt.clim(0.0, 0.5)
         plt.title(title, fontsize = 16)
         plt.savefig(fname)
@@ -229,7 +229,7 @@ if __name__ == '__main__':
 
         field_queue.put((di['fm10_model_state_assim'],
                          'Fuel moisture state %d at %s' % (i, str(mt[i])),
-                         'fm10_assim_field_%03d.png' % i))
+                         os.path.join(path, 'fm10_assim_field_%03d.png' % i)))
 
 
     plt.figure(figsize=(12,8))
