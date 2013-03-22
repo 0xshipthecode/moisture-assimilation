@@ -74,7 +74,7 @@ function main(args)
     setup_tag("kriging_obs_ngp", false, false)
     setup_tag("kriging_errors", true, true)
 
-    setup_tag("kalman_gain_fm10", false, false, false)
+    setup_tag("kalman_gain_fm10", false, false)
 
     ### Load WRF output data
     t1 = Calendar.now()

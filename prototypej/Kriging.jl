@@ -127,6 +127,8 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     # initialize iterative algorithm
     s2_eta_hat_old = -10.0
     s2_eta_hat = 0.0
+    XtSX = nothing
+    beta = nothing
 
     i = 0
     subzeros = 0
