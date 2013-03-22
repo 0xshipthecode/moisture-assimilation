@@ -103,26 +103,26 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     # quick pre-conditioning hack
     # rescale all X[:,:,i] to have norm of X[:,:,1]
     norm_1 = sum(X[:,:,1].^2)^0.5
-    cov_ids = [1]
     for i in 2:Ncov_all
         norm_i = sum(X[:,:,i].^2)^0.5
         if norm_i > 0.0
             X[:,:,i] *= norm_1 / norm_i
-            push!(cov_ids, i)
         end
     end
 
-    # if we have zero covariates, we must exclude them or a singular exception will be thron by \
-    Ncov = length(cov_ids)
-    X = X[:,:,cov_ids]
-
-    Xobs = zeros(Nobs, Ncov)
+    Xobs = zeros(Nobs, Ncov_all)
     for (obs,i) in zip(obs_data, 1:Nobs)
     	p = nearest_grid_point(obs)
         y[i] = obs_value(obs)
         Xobs[i,:] = X[p[1], p[2], :]
         m_var[i] = obs_variance(obs)
     end
+
+    # if we have zero covariates, we must exclude them or a singular exception will be thrown by \
+    cov_ids = (1:Ncov_all)[find(map(i -> sum(Xobs[:,i].^2) > 0, 1:Ncov_all))]
+    Ncov = length(cov_ids)
+    X = X[:,:,cov_ids]
+    Xobs = Xobs[:, cov_ids]
 
     # initialize iterative algorithm
     s2_eta_hat_old = -10.0
@@ -140,6 +140,7 @@ function trend_surface_model_kriging(obs_data, X, K, V)
         # recompute the covariance matrix
         Sigma = diagm(m_var) + s2_eta_hat * eye(Nobs)
         XtSX = Xobs' * (Sigma \ Xobs)
+        println(XtSX)
         beta = XtSX \ Xobs' * (Sigma \ y)
         res = y - Xobs * beta
 
