@@ -15,6 +15,75 @@ using Storage
 import Storage.spush
 
 
+function numerical_solve_newton(e2, eps2, k)
+
+    N = size(e2,1)
+    s2_eta = 0.0
+
+    val_low = sum(e2 ./ eps2) - (N - k)
+    if val < 0.0
+        return -1.0
+    end
+
+    # Newtons method implementation (initialized with s2_eta = 0)
+    while abs(val) > 1e-6
+        
+        # compute the derivative at the new value
+        der = - sum(e2 ./ (eps2 + s2_eta))
+
+        println("numerical_solve: s2_eta $s2_eta val $val der $der")
+
+        # update sigma2_eta estimate
+        s2_eta -= val/der
+
+        # compute the new value of the function given current value
+        val = sum(e2 ./ (eps2 + s2_eta)) - (N - k)
+
+    end
+
+    return s2_eta
+
+end
+
+    
+function numerical_solve_bisect(e2, eps2, k)
+
+    N = size(e2,1)
+    tgt = N - k
+    s2_eta_left = 0.0
+    s2_eta_right = 0.1
+
+    val_left = sum(e2 ./ eps2)
+    val_right = sum(e2 ./ (eps2 + s2_eta_right))
+    if val_left < tgt
+        return -1.0
+    end
+
+    while val_right > tgt
+        s2_eta_right *= 2.0
+        val_right = sum(e2 ./ (eps2 + s2_eta_right))
+    end
+
+    # Newtons method implementation (initialized with s2_eta = 0)
+    while val_left - val_right > 1e-6
+        
+        # compute new value at center of eta interval
+        s2_eta = 0.5 * (s2_eta_left + s2_eta_right)
+        val = sum(e2 ./ (eps2 + s2_eta))
+
+        if val > tgt
+            val_left, s2_eta_left = val, s2_eta
+        else
+            val_right, s2_eta_right = val, s2_eta
+        end
+
+    end
+
+    return 0.5 * (s2_eta_left + s2_eta_right)
+
+end
+
+
 function trend_surface_model_kriging(obs_data, X, K, V)
     """
     Trend surface model kriging, which assumes spatially uncorrelated errors.
@@ -77,19 +146,14 @@ function trend_surface_model_kriging(obs_data, X, K, V)
         for j in 1:Nobs
             s2_array[j] += dot(vec(Xobs[j,:]), vec(XtSX \ Xobs[j,:]'))
         end
-        s2_eta_hat = sum(s2_array) / Nobs
+        s2_eta_hat2 = sum(s2_array) / Nobs
+
+        s2_eta_hat = numerical_solve_bisect(res.^2, m_var, Ncov)
 
         subzeros = sum(s2_array .< 0)
         i += 1
-        println("Iter: $i  old $s2_eta_hat_old  new $s2_eta_hat")
+        println("Iter: $i  old $s2_eta_hat_old  new $s2_eta_hat  other $s2_eta_hat2")
     end
-
-    # construct new covariance with last s2_eta_hat
-    Sigma = s2_eta_hat * eye(Nobs) + diagm(m_var)
-
-    # estimate the beta trend parameters
-    XtSX = Xobs' * (Sigma \ Xobs)
-    beta = XtSX \ (Xobs' * (Sigma \ y))
 
     # compute the OLS fit of the covariates to the observations
     spush("kriging_xtx_cond", cond(XtSX))

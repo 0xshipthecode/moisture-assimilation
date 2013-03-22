@@ -24,6 +24,7 @@ def file_loader(x):
 def plot_maker(jobs):
     # reimport what we need for plotting
     import matplotlib.pyplot as plt
+
     plt.figure(figsize = (12,8))
 
     while True:
@@ -46,6 +47,28 @@ def plot_maker(jobs):
         plt.ylabel('Fuel moisture [-]')
         plt.xlim(-0.5, len(sids_pos) - 0.5)
         plt.ylim(0.0, fm_max)
+        plt.savefig(fname)
+
+
+def field_plot_maker(jobs):
+
+    #import what we need for plotting
+    import matplotlib.pyplot as plt
+    plt.figure(figsize = (12,8))
+    
+    while True:
+        # retrieve next assignment (or None if end of queue)
+        tmp = jobs.get()
+        if tmp == None:
+            break
+
+        # decode
+        (f, title, fname) = tmp
+        
+        plt.clf()
+        plt.imshow(f[::-1,:], 'ro')
+        plt.clim(0.0, 0.5)
+        plt.title(title, fontsize = 16)
         plt.savefig(fname)
 
 
@@ -169,6 +192,7 @@ if __name__ == '__main__':
     fm_max = min(fm_max, 0.6)
 
     plot_queue = Queue()
+    field_queue = Queue()
 
     # plot the raws, model values at obs points and kriging
 #    plt.figure(figsize = (12,8))
@@ -203,6 +227,10 @@ if __name__ == '__main__':
         # plt.ylim(0.0, fm_max)
         # plt.savefig(os.path.join(path, "image_%03d.png" % i))
 
+        field_queue.put((di['fm10_model_state_assim'],
+                         'Fuel moisture state %d at %s' % (i, str(mt[i])),
+                         'fm10_assim_field_%03d.png' % i))
+
 
     plt.figure(figsize=(12,8))
     plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
@@ -235,6 +263,21 @@ if __name__ == '__main__':
     # wait for workers to complete
     for worker in workers:
         worker.join()
+
+    workers = []
+    for i in range(num_workers): 
+        # end-of-queue marker (one for each worker)
+        field_queue.put(None)
+
+        # create a new worker and add it to the pool
+        tmp = Process(target=field_plot_maker, args=(field_queue,))
+        tmp.start()
+        workers.append(tmp)
+
+    # wait for workers to complete
+    for worker in workers:
+        worker.join()
+
 
     plt.figure(figsize = (12,8))
     for sid,ngp in sids.iteritems():
