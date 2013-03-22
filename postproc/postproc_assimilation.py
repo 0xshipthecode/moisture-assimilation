@@ -140,6 +140,8 @@ if __name__ == '__main__':
         plt.ylabel('$\\beta_%d $ [-]' % (i+1))
         plt.xlabel('Time [-]')
         plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+        y = plt.ylim()
+        plt.ylim(0, y[1])
         plt.savefig(os.path.join(path, "kriging_beta_%d.png" % (i+1)))
 
     # plot maes
@@ -149,6 +151,8 @@ if __name__ == '__main__':
     plt.ylabel('Mean abs difference [g]')
     plt.xlabel('Time [-]')
     plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+    y = plt.ylim()
+    plt.ylim(0, y[1])
     plt.savefig(os.path.join(path, "model_maes.png"))
 
     # plot the etas
@@ -157,6 +161,8 @@ if __name__ == '__main__':
     plt.ylabel('Kriging eta variance [-]')
     plt.xlabel('Time [-]')
     plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+    y = plt.ylim()
+    plt.ylim(0, y[1])
     plt.savefig(os.path.join(path, "eta_variance.png"))
     
     
