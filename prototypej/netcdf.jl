@@ -74,7 +74,7 @@ function readvar(nc::NcFile,varname::String,start::Array,count::Array)
   for i in count
     p=p*i
   end
-#  NC_VERBOSE ? println("$ncid $varid $p $count ${nc.vars[varname].nctype}") : nothing
+# NC_VERBOSE ? println("$ncid $varid $p $count ${nc.vars[varname].nctype}") : nothing
   if nc.vars[varname].nctype==NC_DOUBLE
     retvalsa=Array(Float64,p)
     C._nc_get_vara_double_c(ncid,varid,start,count,retvalsa)
@@ -93,11 +93,40 @@ function readvar(nc::NcFile,varname::String,start::Array,count::Array)
   end
 #  NC_VERBOSE ? println("Successfully read from file ",ncid) : nothing
   if length(count)>1 
-    return reshape(retvalsa,ntuple(length(count),x->count[x]))
+    # replaced by MV
+    return fortran_reshape(retvalsa,ntuple(length(count),x->count[x]))
+#    return reshape(retvalsa,ntuple(length(count),x->count[x]))
   else
     return retvalsa
   end
 end
+
+
+# quick hack to reshape a C-order array (NETCDF layout) to F-order array (Julia layout)
+function fortran_reshape(a::Array, dims::Tuple)
+
+    ret = zeros(eltype(a), dims)
+    Ndims = length(dims)
+    pos = ones(Int64,Ndims)
+    Nelem = size(a,1)
+    for ndx=1:Nelem-1
+        # terribly inefficient, convert position array to tuple and index
+        setindex!(ret, a[ndx], ntuple(length(pos), x -> pos[x])...)
+
+        # move by one position in C-order
+        pos[Ndims] += 1
+        incrp = Ndims
+        while pos[incrp] > dims[incrp]
+            pos[incrp] = 1
+            incrp -= 1
+            pos[incrp] += 1
+        end
+    end
+    setindex!(ret, a[Nelem], ntuple(length(pos), x-> pos[x])...)
+    return ret
+end
+
+
 function readvar(nc::NcFile,varid::Integer,start,count) 
   va=ncHelpers.getvarbyid(nc,varid)
   va == nothing ? error("Error: Variable $varid not found in $(nc.name)") : return readvar(nc,va.varname,start,count)

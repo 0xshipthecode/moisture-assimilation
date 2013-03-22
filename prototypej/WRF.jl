@@ -47,14 +47,9 @@ function load_wrf_data(file_path::String, var_list::Array{ASCIIString})
         w.fields[v] = netcdf.ncread(file_path, v)
     end
 
-    # time is stored as a sequence of 19-byte datetime markers,
-    # however the orientation of the read-in variable is incorrect
-    # size is T x 19 but should be 19 x T, thus the reshape.
     tm = netcdf.ncread(file_path, "Times")
-    s = size(tm)
-    tm = reshape(tm, (s[2], s[1]))
     for i in 1:size(tm,2)
-        push!(w.tm, Calendar.parse("yyyy-MM-dd_HH:mm:ss", ascii(squeeze(tm[:,i], 2)), "GMT"))
+        push!(w.tm, Calendar.parse("yyyy-MM-dd_HH:mm:ss", ascii(squeeze(tm[i,:], 1)), "GMT"))
     end
 
     # read in grid dimensions
@@ -125,6 +120,8 @@ end
 
 
 function compute_equilibrium_moisture(w::WRFData)
+
+    # pull out required fields from WRF
     P, Q, T = field(w, "PSFC"), field(w, "Q2"), field(w, "T2")
 
     N = size(P,1)

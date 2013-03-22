@@ -59,8 +59,8 @@ function sclose()
 end
 
 
-function setup_tag(tag :: String, series_store :: Bool, stdout :: Bool, logout :: Bool)
-    sm.tag_cfg[tag] = (series_store, stdout, logout)
+function setup_tag(tag :: String, stdout :: Bool, logout :: Bool)
+    sm.tag_cfg[tag] = (stdout, logout)
 end
 
 
@@ -112,21 +112,11 @@ function spush(tag :: String, data)
     c = sm.tag_cfg[tag]
     sm.current_frame[tag] = data
 
-    # store in time series store if requested
-    if c[1]
-        if !has(sm.ts_store, tag) sm.ts_store[tag] = typeof(data)[] end
-        push!(sm.ts_store[tag], data)
-    end
-
     # if stdout requested print it
-    if c[2]
-        println(string(tag, " : ", data))
-    end
+    if c[1] println(string(tag, " : ", data)) end
 
     # if logout is requested
-    if c[3] 
-        println(sm.log_io, string(tag, " : ", data))
-    end
+    if c[2] println(sm.log_io, string(tag, " : ", data)) end
 end
 
 
