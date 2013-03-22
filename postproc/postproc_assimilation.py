@@ -63,12 +63,13 @@ def field_plot_maker(jobs):
             break
 
         # decode
-        (f, title, fname) = tmp
+        (f, title, fm_max, fname) = tmp
         
         plt.clf()
-        plt.imshow(f[::-1,:])
-        plt.clim(0.0, 0.5)
+        plt.imshow(f)
+        plt.clim(0.0, fm_max)
         plt.title(title, fontsize = 16)
+        plt.colorbar()
         plt.savefig(fname)
 
 
@@ -228,9 +229,13 @@ if __name__ == '__main__':
         # plt.savefig(os.path.join(path, "image_%03d.png" % i))
 
         field_queue.put((di['fm10_model_state_assim'],
-                         'Fuel moisture state %d at %s' % (i, str(mt[i])),
+                         'Fuel moisture state %d at %s (ASSIM)' % (i, str(mt[i])), fm_max,
                          os.path.join(path, 'fm10_assim_field_%03d.png' % i)))
 
+
+        field_queue.put((di['fm10_model_na_state'],
+                         'Fuel moisture state %d at %s (NA)' % (i, str(mt[i])), fm_max,
+                         os.path.join(path, 'fm10_na_field_%03d.png' % i)))
 
     plt.figure(figsize=(12,8))
     plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)

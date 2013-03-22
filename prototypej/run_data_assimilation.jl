@@ -88,6 +88,7 @@ function main(args)
 
     # extract WRF fields
     lat, lon = WRF.lat(w), WRF.lon(w)
+    println("INFO: WRF grid size is $(size(lat,1)) x $(size(lat,2)).")
     wtm = WRF.times(w)
     dsize = size(lat)
 
