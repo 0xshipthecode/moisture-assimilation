@@ -48,7 +48,7 @@ function load_wrf_data(file_path::String, var_list::Array{ASCIIString})
     end
 
     tm = netcdf.ncread(file_path, "Times")
-    for i in 1:size(tm,2)
+    for i in 1:size(tm,1)
         push!(w.tm, Calendar.parse("yyyy-MM-dd_HH:mm:ss", ascii(squeeze(tm[i,:], 1)), "GMT"))
     end
 

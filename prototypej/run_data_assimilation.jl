@@ -88,8 +88,8 @@ function main(args)
 
     # extract WRF fields
     lat, lon = WRF.lat(w), WRF.lon(w)
-    println("INFO: WRF grid size is $(size(lat,1)) x $(size(lat,2)).")
     wtm = WRF.times(w)
+    println("INFO: WRF grid size is $(size(lat,1)) x $(size(lat,2)) and found $(length(wtm)) timepoints.")
     dsize = size(lat)
 
     # retrieve equilibria and rain (these are already precomputed)
