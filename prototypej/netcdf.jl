@@ -94,11 +94,45 @@ function readvar(nc::NcFile,varname::String,start::Array,count::Array)
 #  NC_VERBOSE ? println("Successfully read from file ",ncid) : nothing
   if length(count)>1 
     # replaced by MV
-    return fortran_reshape(retvalsa,ntuple(length(count),x->count[x]))
+    if length(count) == 2
+        return fortran_reshape_2d(retvalsa,ntuple(length(count),x->count[x]))
+    elseif length(count) == 3
+        return fortran_reshape_3d(retvalsa, ntuple(length(count), x->count[x]))
+    else
+        # WARNING this is SLOW
+        return fortran_reshape(retvalsa,ntuple(length(count),x->count[x]))
+    end
 #    return reshape(retvalsa,ntuple(length(count),x->count[x]))
   else
     return retvalsa
   end
+end
+
+function fortran_reshape_2d(a::Array, dims::Tuple)
+    ret = zeros(eltype(a), dims)
+    ndx = 1
+    for i=1:dims[1]
+        for j=1:dims[2]
+            ret[i,j] = a[ndx]
+            ndx += 1
+        end
+    end
+    return ret
+end
+
+
+function fortran_reshape_3d(a::Array, dims::Tuple)
+    ret = zeros(eltype(a), dims)
+    ndx = 1
+    for i=1:dims[1]
+        for j=1:dims[2]
+            for k=1:dims[3]
+                ret[i,j,k] = a[ndx]
+                ndx += 1
+            end
+        end
+    end
+    return ret
 end
 
 
