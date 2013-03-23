@@ -100,16 +100,6 @@ function trend_surface_model_kriging(obs_data, X, K, V)
     y = zeros((Nobs,1))
     m_var = zeros(Nobs)
 
-    # quick pre-conditioning hack
-    # rescale all X[:,:,i] to have norm of X[:,:,1]
-    norm_1 = sum(X[:,:,1].^2)^0.5
-    for i in 2:Ncov_all
-        norm_i = sum(X[:,:,i].^2)^0.5
-        if norm_i > 0.0
-            X[:,:,i] *= norm_1 / norm_i
-        end
-    end
-
     Xobs = zeros(Nobs, Ncov_all)
     for (obs,i) in zip(obs_data, 1:Nobs)
     	p = nearest_grid_point(obs)
@@ -117,12 +107,23 @@ function trend_surface_model_kriging(obs_data, X, K, V)
         Xobs[i,:] = X[p[1], p[2], :]
         m_var[i] = obs_variance(obs)
     end
-
+    
     # if we have zero covariates, we must exclude them or a singular exception will be thrown by \
     cov_ids = (1:Ncov_all)[find(map(i -> sum(Xobs[:,i].^2) > 0, 1:Ncov_all))]
     Ncov = length(cov_ids)
     X = X[:,:,cov_ids]
     Xobs = Xobs[:, cov_ids]
+
+    # quick pre-conditioning hack
+    # rescale all columns of Xobs to have norm of first column
+    norm_1 = sum(Xobs[:,1].^2)^0.5
+    for i in 2:Ncov
+        norm_i = sum(Xobs[:,i].^2)^0.5
+        if norm_i > 0.0
+            Xobs[:,i] *= norm_1 / norm_i
+            X[:,:,i] *= norm_1 / norm_i
+        end
+    end
 
     # initialize iterative algorithm
     s2_eta_hat_old = -10.0
