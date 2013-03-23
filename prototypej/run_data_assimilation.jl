@@ -81,10 +81,10 @@ function main(args)
     println("INFO: configuration complete, loading WRF data.")
 
     # read in data from the WRF output file pointed to by cfg
-    w = WRF.load_wrf_data(cfg["wrf_output"], ASCIIString[])
+    w = WRF.load_wrf_data(cfg["wrf_output"], ["HGT"])
 
     # the terrain height need not be stored for all time points
-#    WRF.slice_field(w, "HGT")
+    WRF.slice_field(w, "HGT")
 
     # extract WRF fields
     lat, lon = WRF.lat(w), WRF.lon(w)
@@ -95,7 +95,7 @@ function main(args)
     # retrieve equilibria and rain (these are already precomputed)
     Ed, Ew = WRF.field(w, "Ed"), WRF.field(w, "Ew")
     rain = WRF.field(w, "RAIN")
-#    hgt = WRF.field(w, "HGT")
+    hgt = WRF.field(w, "HGT")
     T = WRF.interpolated_field(w, "T2")
     P = WRF.interpolated_field(w, "PSFC")
 
@@ -144,7 +144,7 @@ function main(args)
     cov_ids = cfg["covariates"]
     st_covar_map = [:lon => lon,
                     :lat => lat,
-#                    :elevation => hgt,
+                    :elevation => hgt,
                     :constant => ones(Float64, dsize) ]
     dyn_covar_map = [:temperature => T, :pressure => P, :rain => rain]
     Xd3 = length(cov_ids) + 1

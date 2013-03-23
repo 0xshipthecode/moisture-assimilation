@@ -133,7 +133,7 @@ if __name__ == '__main__':
     # plot the betas
     plt.figure(figsize=(12,8))
     plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
-    Nc  = beta.shape[1]
+    Nc = beta.shape[1]
     for i in range(Nc):
         plt.clf()
         plt.plot(beta[:,i])
@@ -141,7 +141,7 @@ if __name__ == '__main__':
         plt.xlabel('Time [-]')
         plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
         y = plt.ylim()
-        plt.ylim(0, y[1])
+        plt.ylim(0.0, y[1])
         plt.savefig(os.path.join(path, "kriging_beta_%d.png" % (i+1)))
 
     # plot maes
@@ -190,13 +190,19 @@ if __name__ == '__main__':
 
     # find the maximal values of the plotted variables
     fm_max = 0.0
+    fm_max_na = 0.0
+    fm_max_assim = 0.0
     for i in range(N):
         di = data[i]
-        fm_max = max(fm_max, np.amax(di['fm10_model_state']), np.amax(di['fm10_model_na_state']),
+        fm_max_assim = max(fm_max_assim, np.amax(di['fm10_model_state_assim']))
+        fm_max_na = max(fm_max_na, np.amax(di['fm10_model_na_state']))
+        fm_max = max(fm_max, np.amax(di['fm10_model_state']), fm_max_na, fm_max_assim,
                      np.amax(di['kriging_field']), np.amax(di['kriging_obs']))
 
     # artificially chop the max so that in case there are extreme values at least something is visible
     fm_max = min(fm_max, 0.6)
+    fm_max_assim = min(fm_max_assim, 0.6)
+    fm_max_na = min(fm_max_na, 0.6)
 
     plot_queue = Queue()
     field_queue = Queue()
@@ -235,12 +241,12 @@ if __name__ == '__main__':
         # plt.savefig(os.path.join(path, "image_%03d.png" % i))
 
         field_queue.put((di['fm10_model_state_assim'],
-                         'Fuel moisture state %d at %s (ASSIM)' % (i, str(mt[i])), fm_max,
+                         'Fuel moisture state %d at %s (ASSIM)' % (i, str(mt[i])), fm_max_assim,
                          os.path.join(path, 'fm10_assim_field_%03d.png' % i)))
 
 
         field_queue.put((di['fm10_model_na_state'],
-                         'Fuel moisture state %d at %s (NA)' % (i, str(mt[i])), fm_max,
+                         'Fuel moisture state %d at %s (NA)' % (i, str(mt[i])), fm_max_na,
                          os.path.join(path, 'fm10_na_field_%03d.png' % i)))
 
     plt.figure(figsize=(12,8))
