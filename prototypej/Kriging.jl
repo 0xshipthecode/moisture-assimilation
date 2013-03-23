@@ -140,7 +140,6 @@ function trend_surface_model_kriging(obs_data, X, K, V)
         # recompute the covariance matrix
         Sigma = diagm(m_var) + s2_eta_hat * eye(Nobs)
         XtSX = Xobs' * (Sigma \ Xobs)
-        println(XtSX)
         beta = XtSX \ Xobs' * (Sigma \ y)
         res = y - Xobs * beta
 
