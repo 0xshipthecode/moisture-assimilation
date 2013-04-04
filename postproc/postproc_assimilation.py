@@ -209,17 +209,24 @@ if __name__ == '__main__':
 
     # plot the raws, model values at obs points and kriging
 #    plt.figure(figsize = (12,8))
+    kerrors = []
     for i in range(N):
 #        plt.clf()
         di = data[i]
         dobs = di['kriging_obs']
+        derrs = di['kriging_errors'][0,:]
         Nobs = len(dobs)
 
         # fill out observations we have for this frame
         obs = np.zeros(len(sids_list))
         obs[:] = float("nan")
-        for (s,j) in zip(di['kriging_obs_station_ids'],range(Nobs)) :
+        errs_i = np.zeros(len(sids_list))
+        errs_i[:] = float("nan")
+        for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)) :
             obs[sids_pos[s]] = dobs[j]
+        for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)):
+            errs_i[sids_pos[s]] = derrs[j]
+        kerrors.append(errs_i)
 
         m = [di['fm10_model_state'][p] for p in sids_ngp]
         m_a = [di['fm10_model_state_assim'][p] for p in sids_ngp]
@@ -264,7 +271,26 @@ if __name__ == '__main__':
     dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
     plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
     plt.savefig(os.path.join(path, "error_variance.png"))
-        
+
+    plt.clf()
+    kecc = np.ma.corrcoef(np.ma.array(kerrors, mask = np.isnan(kerrors)), rowvar = False)
+    plt.imshow(kecc, interpolation='nearest')
+    plt.colorbar()
+    plt.title('Correlation coefficients of kriging errors')
+    plt.clim([-1, 1])
+    ax = plt.gca()
+    ax.set_xticks(np.arange(len(sids_list)))
+    ax.set_xticklabels(sids_list, rotation = 90)
+    ax.set_yticks(np.arange(len(sids_list)))
+    ax.set_yticklabels(sids_list)
+    plt.savefig(os.path.join(path, "kriging_error_correlations.png"))
+
+    plt.clf()
+    trindx = np.triu_indices(kecc.shape[0], 1)
+    plt.hist(kecc[trindx], int(trindx[0].shape[0]**0.5), normed = True)
+    plt.xlim([-1, 1])
+    plt.title("Histogram of correlation coefficients of kriging errors")
+    plt.savefig(os.path.join(path, "kriging_errors_histogram.png"))
 
     # start up the workers and process the queue
     workers = []
