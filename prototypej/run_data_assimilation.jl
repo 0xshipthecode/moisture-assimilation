@@ -46,6 +46,10 @@ function main(args)
 
     cfg = evalfile(args[1])
 
+    # create the output directory if it does not exist
+    println("INFO: output directory is ", cfg["output_dir"])
+    !ispath(cfg["output_dir"]) && mkdir(cfg["output_dir"])
+
     # configure Storage mechanism
     Storage.sopen(cfg["output_dir"], "moisture_model_v2_diagnostics.txt", "frame")
 
@@ -56,6 +60,7 @@ function main(args)
     setup_tag("fm10_model_state_assim", false, false)
     setup_tag("fm10_model_na_state", false, false)
     setup_tag("fm10_model_var", false, false)
+    setup_tag("fm10_model_deltas", false, false)
 
     setup_tag("kriging_beta", true, true)
     setup_tag("kriging_xtx_cond", true, true)
@@ -126,6 +131,9 @@ function main(args)
 
     ### Initialize model
 
+    # number of simulated fuel components
+    Nf = 3
+
     # construct initial conditions (FIXME: can we do better here?)
     E = squeeze(0.5 * (Ed[2,:,:] + Ew[2,:,:]), 1)
 
@@ -140,7 +148,7 @@ function main(args)
     K = zeros(Float64, dsize)
     V = zeros(Float64, dsize)
 
-    # build static part of covariates
+    # prepare static & time-varying covariates
     cov_ids = cfg["covariates"]
     st_covar_map = [:lon => lon,
                     :lat => lat,
@@ -177,8 +185,8 @@ function main(args)
     for i in 1:dsize[1]
     	for j in 1:dsize[2]
             geo_loc = (lat[i,j], lon[i,j])
-	    models[i,j] = FMModel(geo_loc, 3, E[i,j], P0, Tk)
-	    models_na[i,j] = FMModel(geo_loc, 3, E[i,j], P0, Tk)
+	    models[i,j] = FMModel(geo_loc, Nf, E[i,j], P0, Tk)
+	    models_na[i,j] = FMModel(geo_loc, Nf, E[i,j], P0, Tk)
 	end
     end
 
@@ -274,6 +282,16 @@ function main(args)
             # push the fm10 model state after the assimilation
             fm10_model_state = [ models[i,j].m_ext[2] for i=1:dsize[1], j=1:dsize[2] ]
             spush("fm10_model_state_assim", fm10_model_state)
+
+            # retrieve adjustments to time constants and to equilibria
+            fm10_adj = zeros(Float64, (6, dsize[1], dsize[2]))
+            for i in 1:dsize[1]
+                for j in 1:dsize[2]
+                    fm10_adj[:,i,j] = models[i,j].m_ext[Nf+1:2*Nf+3]
+                end
+            end
+            fm10_adj_max = [ max(abs(fm10_adj[i,:,:])) for i in 1:6 ]
+            spush("fm10_model_deltas", fm10_adj_max)
 
             # gather model values at ngp points after assimilation
             m_at_obs = Float64[fm10_model_state[i, j] for (i,j) in  ngp_list]

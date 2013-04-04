@@ -14,11 +14,14 @@ num_workers = 16
 data = []
 
 
-def file_loader(x):
+def file_loader_slave(x):
     i, fname = x
+
+    # read in the file
     with open(fname, "r") as f:
         d = eval(f.read())
-    return (i, d)
+
+    return i, d
 
 
 def plot_maker(jobs):
@@ -73,6 +76,17 @@ def field_plot_maker(jobs):
         plt.savefig(fname)
 
 
+def make_subdirs(path):
+    """
+    Construct subdirectories to store various parts of the results.
+    """
+    for subp in ["fm10_assim", "fm10_na", "stats", "station_xsection", "stations"]:
+        try:
+            os.mkdir(os.path.join(path, subp))
+        except OSError:
+            pass
+
+
 if __name__ == '__main__':
 
     if len(sys.argv) < 2:
@@ -80,38 +94,27 @@ if __name__ == '__main__':
         sys.exit(1)
 
     path = sys.argv[1]
+    what = sys.argv[2:]
     lst = glob.glob(os.path.join(path, "frame*"))
     N = len(lst)
 
+    # construct all subdirectories
+    make_subdirs(path)
+
+    # load the data in parallel
     print("Loading the output data.")
-
     pool = Pool(16)
-
-    # if a pickle object exists
-#    pickle_path = os.path.join(path, "_pickled_cache")
-#    if os.path.exists(pickle_path):
-#        with open(pickle_path, "r") as f:
-#            data = cPickle.load(f)
-#    else:
-        # open files in sequence and read the internals
-    # create a set of jobs to read in the files
     data = [None] * N
-    read_job = [ (i, os.path.join(path, "frame%d" % i)) for i in range(1, N+1) ]
-    read_res = pool.map(file_loader, read_job)
+    read_job_list = [ (i, os.path.join(path, "frame%d" % i)) for i in range(1, N+1) ]
+    print len(read_job_list)
+    read_res = pool.map(file_loader_slave, read_job_list)
     for i,di in read_res:
         data[i-1] = di
 
+    # make read_res available for loading
+    read_res = None
+
     pool.close()
-
-#    for i in range(1, N+1):
-#        with open(os.path.join(path, "frame%d" % i), "r") as f:
-#            data.append(eval(f.read()))
-
-        # pickle to cache future use
-#        with open(pickle_path, "w") as f:
-#            cPickle.dump(data, f)
-
-    print("Constructing time plots.")
 
     # extract the betas and model times
     beta = np.zeros((N, np.prod(data[0]['kriging_beta'].shape)))
@@ -126,48 +129,49 @@ if __name__ == '__main__':
         maes[i,2] = data[i]['model_na_raws_mae']
         ks2[i] = data[i]['kriging_sigma2_eta']
 
+
     # prepare dates for x axis of time plots
     date_ndx = np.arange(0, N, N/20)
     dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
+    
+    if "stats" in what or "all" in what:
+        print("Constructing time plots.")
+    
+        # plot the betas
+        plt.figure(figsize=(12,8))
+        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
+        Nc = beta.shape[1]
+        for i in range(Nc):
+            plt.clf()
+            plt.plot(beta[:,i])
+            plt.ylabel('$\\beta_%d $ [-]' % (i+1))
+            plt.xlabel('Time [-]')
+            plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+            y = plt.ylim()
+            plt.ylim(0.0, y[1])
+            plt.savefig(os.path.join(path, "stats", "kriging_beta_%d.png" % (i+1)))
 
-    # plot the betas
-    plt.figure(figsize=(12,8))
-    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
-    Nc = beta.shape[1]
-    for i in range(Nc):
+        # plot maes
         plt.clf()
-        plt.plot(beta[:,i])
-        plt.ylabel('$\\beta_%d $ [-]' % (i+1))
+        plt.plot(maes)
+        plt.legend(['forecast', 'analysis', 'no assim'])
+        plt.ylabel('Mean abs difference [g]')
         plt.xlabel('Time [-]')
         plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
         y = plt.ylim()
-        plt.ylim(0.0, y[1])
-        plt.savefig(os.path.join(path, "kriging_beta_%d.png" % (i+1)))
+        plt.ylim(0, y[1])
+        plt.savefig(os.path.join(path, "stats", "model_maes.png"))
 
-    # plot maes
-    plt.clf()
-    plt.plot(maes)
-    plt.legend(['forecast', 'analysis', 'no assim'])
-    plt.ylabel('Mean abs difference [g]')
-    plt.xlabel('Time [-]')
-    plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-    y = plt.ylim()
-    plt.ylim(0, y[1])
-    plt.savefig(os.path.join(path, "model_maes.png"))
-
-    # plot the etas
-    plt.clf()
-    plt.plot(ks2)
-    plt.ylabel('Kriging eta variance [-]')
-    plt.xlabel('Time [-]')
-    plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-    y = plt.ylim()
-    plt.ylim(0, y[1])
-    plt.savefig(os.path.join(path, "eta_variance.png"))
+        # plot the etas
+        plt.clf()
+        plt.plot(ks2)
+        plt.ylabel('Microscale variability variance [-]')
+#        plt.xlabel('Time [-]')
+        plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+        y = plt.ylim()
+        plt.ylim(0, y[1])
+        plt.savefig(os.path.join(path, "stats", "eta_variance.png"))
     
-    
-
-    print("Generating observation/model matchups for %d time points." % N)
 
     # gather all station ids that provide observations
     sids = {}
@@ -208,158 +212,153 @@ if __name__ == '__main__':
     field_queue = Queue()
 
     # plot the raws, model values at obs points and kriging
-#    plt.figure(figsize = (12,8))
-    kerrors = []
-    for i in range(N):
-#        plt.clf()
-        di = data[i]
-        dobs = di['kriging_obs']
-        derrs = di['kriging_errors'][0,:]
-        Nobs = len(dobs)
+    if "fields" in what or "all" in what:
+        print("Generating observation/model matchups for %d time points." % N)
 
-        # fill out observations we have for this frame
-        obs = np.zeros(len(sids_list))
-        obs[:] = float("nan")
-        errs_i = np.zeros(len(sids_list))
-        errs_i[:] = float("nan")
-        for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)) :
-            obs[sids_pos[s]] = dobs[j]
-        for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)):
-            errs_i[sids_pos[s]] = derrs[j]
-        kerrors.append(errs_i)
+        kerrors = []
+        for i in range(N):
+            di = data[i]
+            dobs = di['kriging_obs']
+            derrs = di['kriging_errors'][0,:]
+            Nobs = len(dobs)
 
-        m = [di['fm10_model_state'][p] for p in sids_ngp]
-        m_a = [di['fm10_model_state_assim'][p] for p in sids_ngp]
-        m_na = [di['fm10_model_na_state'][p] for p in sids_ngp]
-        kf = [di['kriging_field'][p] for p in sids_ngp]
-        fname = os.path.join(path, "image_%03d.png" % i)
+            # fill out observations we have for this frame
+            obs = np.zeros(len(sids_list))
+            obs[:] = float("nan")
+            errs_i = np.zeros(len(sids_list))
+            errs_i[:] = float("nan")
+            for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)) :
+                obs[sids_pos[s]] = dobs[j]
+            for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)):
+                errs_i[sids_pos[s]] = derrs[j]
+            kerrors.append(errs_i)
 
-        plot_queue.put((m, m_a, m_na, obs, kf, sids_pos, sids_list, fm_max, fname))
+            m = [di['fm10_model_state'][p] for p in sids_ngp]
+            m_a = [di['fm10_model_state_assim'][p] for p in sids_ngp]
+            m_na = [di['fm10_model_na_state'][p] for p in sids_ngp]
+            kf = [di['kriging_field'][p] for p in sids_ngp]
+            fname = os.path.join(path, "image_%03d.png" % i)
 
-        # plt.plot(m, 'ro')
-        # plt.plot(m_a, 'rs')
-        # plt.plot(m_na, 'go')
-        # plt.plot(obs, 'bo')
-        # plt.plot(kf, 'ko')
-        # plt.xticks(np.arange(len(sids_pos)), sids_list, rotation = 90)
-        # plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
-        # plt.ylabel('Fuel moisture [g]')
-        # plt.ylim(0.0, fm_max)
-        # plt.savefig(os.path.join(path, "image_%03d.png" % i))
+            plot_queue.put((m, m_a, m_na, obs, kf, sids_pos, sids_list, fm_max, fname))
 
-        field_queue.put((di['fm10_model_state_assim'],
-                         'Fuel moisture state %d at %s (ASSIM)' % (i, str(mt[i])), fm_max_assim,
-                         os.path.join(path, 'fm10_assim_field_%03d.png' % i)))
+            field_queue.put((di['fm10_model_state_assim'],
+                             'Fuel moisture state %d at %s (ASSIM)' % (i, str(mt[i])), fm_max_assim,
+                             os.path.join(path, "fm10_assim", "fm10_assim_field_%03d.png" % i)))
+
+            field_queue.put((di['fm10_model_na_state'],
+                             'Fuel moisture state %d at %s (NA)' % (i, str(mt[i])), fm_max_na,
+                             os.path.join(path, "fm10_na", "fm10_na_field_%03d.png" % i)))
 
 
-        field_queue.put((di['fm10_model_na_state'],
-                         'Fuel moisture state %d at %s (NA)' % (i, str(mt[i])), fm_max_na,
-                         os.path.join(path, 'fm10_na_field_%03d.png' % i)))
+        # start up the workers and process the queue
+        workers = []
+        for i in range(num_workers): 
+            # end-of-queue marker (one for each worker)
+            plot_queue.put(None)
 
-    plt.figure(figsize=(12,8))
-    plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
-    err_variance = []
-    for i in range(N):
-        err_i = data[i]['kriging_errors']
-        err_variance.append(1.0 / len(err_i) * np.sum(err_i ** 2))
-        
-    plt.plot(err_variance)
-    plt.title('Variance of model error vs. time')
-    plt.ylabel('Kriging Error variance [-]')
-    plt.xlabel('Time')
-    date_ndx = np.arange(0, N, N/20)
-    dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
-    plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-    plt.savefig(os.path.join(path, "error_variance.png"))
+            # create a new worker and add it to the pool
+            tmp = Process(target=plot_maker, args=(plot_queue,))
+            tmp.start()
+            workers.append(tmp)
 
-    plt.clf()
-    kecc = np.ma.corrcoef(np.ma.array(kerrors, mask = np.isnan(kerrors)), rowvar = False)
-    plt.imshow(kecc, interpolation='nearest')
-    plt.colorbar()
-    plt.title('Correlation coefficients of kriging errors')
-    plt.clim([-1, 1])
-    ax = plt.gca()
-    ax.set_xticks(np.arange(len(sids_list)))
-    ax.set_xticklabels(sids_list, rotation = 90)
-    ax.set_yticks(np.arange(len(sids_list)))
-    ax.set_yticklabels(sids_list)
-    plt.savefig(os.path.join(path, "kriging_error_correlations.png"))
+        # wait for workers to complete
+        for worker in workers:
+            worker.join()
 
-    plt.clf()
-    trindx = np.triu_indices(kecc.shape[0], 1)
-    plt.hist(kecc[trindx], int(trindx[0].shape[0]**0.5), normed = True)
-    plt.xlim([-1, 1])
-    plt.title("Histogram of correlation coefficients of kriging errors")
-    plt.savefig(os.path.join(path, "kriging_errors_histogram.png"))
+        workers = []
+        for i in range(num_workers): 
+            # end-of-queue marker (one for each worker)
+            field_queue.put(None)
 
-    # start up the workers and process the queue
-    workers = []
-    for i in range(num_workers): 
-        # end-of-queue marker (one for each worker)
-        plot_queue.put(None)
+            # create a new worker and add it to the pool
+            tmp = Process(target=field_plot_maker, args=(field_queue,))
+            tmp.start()
+            workers.append(tmp)
 
-        # create a new worker and add it to the pool
-        tmp = Process(target=plot_maker, args=(plot_queue,))
-        tmp.start()
-        workers.append(tmp)
-
-    # wait for workers to complete
-    for worker in workers:
-        worker.join()
-
-    workers = []
-    for i in range(num_workers): 
-        # end-of-queue marker (one for each worker)
-        field_queue.put(None)
-
-        # create a new worker and add it to the pool
-        tmp = Process(target=field_plot_maker, args=(field_queue,))
-        tmp.start()
-        workers.append(tmp)
-
-    # wait for workers to complete
-    for worker in workers:
-        worker.join()
+        # wait for workers to complete
+        for worker in workers:
+            worker.join()
 
 
-    plt.figure(figsize = (12,8))
-    for sid,ngp in sids.iteritems():
-        plt.clf()
+    # print kriging statistics if statistics requested
+    if "stats" in what or "all" in what:
+        plt.figure(figsize=(12,8))
         plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
-
-        # gather all observations from this station
-        obs = []
-        for j in range(N):
-            dj = data[j]['kriging_obs_station_ids']
-            if sid in dj:
-                ndx = dj.index(sid)
-                obs.append(data[j]['kriging_obs'][ndx])
-            else:
-                obs.append(float("nan"))
-
-        m    = [ data[j]['fm10_model_state'][ngp] for j in range(N) ]
-        m_a  = [ data[j]['fm10_model_state_assim'][ngp] for j in range(N) ]
-        m_na = [ data[j]['fm10_model_na_state'][ngp] for j in range(N) ]
-        kfo  = [ data[j]['kriging_field'][ngp] for j in range(N) ]
-        kv   = [ data[j]['kriging_variance'][ngp] for j in range(N) ]
-        mv   = [ data[j]['fm10_model_var'][ngp] for j in range(N) ]
-        plt.plot(m, 'r--')
-        plt.plot(m_a, 'r-')
-        plt.plot(m_na, 'g-')
-        plt.plot(obs, 'bx-')
-        plt.plot(kfo, 'k+')
+        err_variance = []
+        for i in range(N):
+            err_i = data[i]['kriging_errors']
+            err_variance.append(1.0 / len(err_i) * np.sum(err_i ** 2))
+        
+        plt.plot(err_variance)
+        plt.title('Variance of model error vs. time')
+        plt.ylabel('Kriging Error variance [-]')
+        plt.xlabel('Time')
         date_ndx = np.arange(0, N, N/20)
         dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
         plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-        plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
-        plt.ylabel('Fuel moisture [g]')
-        plt.savefig(os.path.join(path, "station_%s.png" % sid))
+        plt.savefig(os.path.join(path, "error_variance.png"))
 
         plt.clf()
-        plt.plot(np.log10(kv), 'ko')
-        plt.plot(np.log10(mv), 'ro')
-        plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-        plt.legend([ 'kriging var', 'model var' ])
-        plt.ylabel('Log10 variance')
-        plt.savefig(os.path.join(path, "station_%s_var.png" % sid))
+        kecc = np.ma.corrcoef(np.ma.array(kerrors, mask = np.isnan(kerrors)), rowvar = False)
+        plt.imshow(kecc, interpolation='nearest')
+        plt.colorbar()
+        plt.title('Correlation coefficients of kriging errors')
+        plt.clim([-1, 1])
+        ax = plt.gca()
+        ax.set_xticks(np.arange(len(sids_list)))
+        ax.set_xticklabels(sids_list, rotation = 90)
+        ax.set_yticks(np.arange(len(sids_list)))
+        ax.set_yticklabels(sids_list)
+        plt.savefig(os.path.join(path, "kriging_error_correlations.png"))
+
+        plt.clf()
+        trindx = np.triu_indices(kecc.shape[0], 1)
+        plt.hist(kecc[trindx], int(trindx[0].shape[0]**0.5), normed = True)
+        plt.xlim([-1, 1])
+        plt.title("Histogram of correlation coefficients of kriging errors")
+        plt.savefig(os.path.join(path, "kriging_errors_histogram.png"))
+
+
+    # plot agreement with simulated and station data
+    if "station_plots" in what or "all" in what:
+        plt.figure(figsize = (12,8))
+        for sid,ngp in sids.iteritems():
+            plt.clf()
+            plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
+
+            # gather all observations from this station
+            obs = []
+            for j in range(N):
+                dj = data[j]['kriging_obs_station_ids']
+                if sid in dj:
+                    ndx = dj.index(sid)
+                    obs.append(data[j]['kriging_obs'][ndx])
+                else:
+                    obs.append(float("nan"))
+
+            m    = [ data[j]['fm10_model_state'][ngp] for j in range(N) ]
+            m_a  = [ data[j]['fm10_model_state_assim'][ngp] for j in range(N) ]
+            m_na = [ data[j]['fm10_model_na_state'][ngp] for j in range(N) ]
+            kfo  = [ data[j]['kriging_field'][ngp] for j in range(N) ]
+            kv   = [ data[j]['kriging_variance'][ngp] for j in range(N) ]
+            mv   = [ data[j]['fm10_model_var'][ngp] for j in range(N) ]
+            plt.plot(m, 'r--')
+            plt.plot(m_a, 'r-')
+            plt.plot(m_na, 'g-')
+            plt.plot(obs, 'bx-')
+            plt.plot(kfo, 'k+')
+            date_ndx = np.arange(0, N, N/20)
+            dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
+            plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+            plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
+            plt.ylabel('Fuel moisture [g]')
+            plt.savefig(os.path.join(path, "station_%s.png" % sid))
+
+            plt.clf()
+            plt.plot(np.log10(kv), 'ko')
+            plt.plot(np.log10(mv), 'ro')
+            plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+            plt.legend([ 'kriging var', 'model var' ])
+            plt.ylabel('Log10 variance')
+            plt.savefig(os.path.join(path, "station_%s_var.png" % sid))
 
