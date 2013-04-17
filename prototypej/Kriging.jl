@@ -14,37 +14,6 @@ import Stations.nearest_grid_point, Stations.obs_variance, Stations.obs_value
 using Storage
 import Storage.spush
 
-
-function numerical_solve_newton(e2, eps2, k)
-
-    N = size(e2,1)
-    s2_eta = 0.0
-
-    val_low = sum(e2 ./ eps2) - (N - k)
-    if val < 0.0
-        return -1.0
-    end
-
-    # Newtons method implementation (initialized with s2_eta = 0)
-    while abs(val) > 1e-6
-        
-        # compute the derivative at the new value
-        der = - sum(e2 ./ (eps2 + s2_eta))
-
-        println("numerical_solve: s2_eta $s2_eta val $val der $der")
-
-        # update sigma2_eta estimate
-        s2_eta -= val/der
-
-        # compute the new value of the function given current value
-        val = sum(e2 ./ (eps2 + s2_eta)) - (N - k)
-
-    end
-
-    return s2_eta
-
-end
-
     
 function numerical_solve_bisect(e2, eps2, k)
 
@@ -64,7 +33,7 @@ function numerical_solve_bisect(e2, eps2, k)
         val_right = sum(e2 ./ (eps2 + s2_eta_right))
     end
 
-    # Newtons method implementation (initialized with s2_eta = 0)
+    # bisection implementation (initialized with s2_eta = 0)
     while val_left - val_right > 1e-6
         
         # compute new value at center of eta interval
