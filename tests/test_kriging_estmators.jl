@@ -1,6 +1,46 @@
 
 
-function trend_surface_model_kriging(X, Z, Sigma2_eps)
+function numerical_solve_bisect(e2, eps2, k)
+
+    N = size(e2,1)
+    tgt = N - k
+    s2_eta_left = 0.0
+    s2_eta_right = 0.1
+
+    val_left = sum(e2 ./ (eps2 + s2_eta_left))
+    if val_left < tgt
+        return -1.0
+    end
+
+    val_right = sum(e2 ./ (eps2 + s2_eta_right))
+    while val_right > tgt
+        s2_eta_right *= 2.0
+        val_right = sum(e2 ./ (eps2 + s2_eta_right))
+    end
+
+    # Newtons method implementation (initialized with s2_eta = 0)
+    while abs(val_left - val_right) / (0.5 * (val_right + val_left)) > 1e-3
+        
+        # compute new value at center of eta interval
+        s2_eta = 0.5 * (s2_eta_left + s2_eta_right)
+        val = sum(e2 ./ (eps2 + s2_eta))
+
+        if val > tgt
+            val_left, s2_eta_left = val, s2_eta
+        else
+            val_right, s2_eta_right = val, s2_eta
+        end
+
+    end
+
+    return 0.5 * (s2_eta_left + s2_eta_right)
+
+end
+
+
+function trend_surface_model_kriging(X, Z, sigma2_eps, meth)
+
+#    println("***** TSM *****")
 
     # now run the iterative kriging estimator
     sigma2_eta_hat = 0
@@ -8,92 +48,83 @@ function trend_surface_model_kriging(X, Z, Sigma2_eps)
     beta_hat = []
     res = []
     i = 1
-    while abs(sigma2_eta_hat - sigma2_eta_hat_old) > 1e-4
+    while abs(sigma2_eta_hat - sigma2_eta_hat_old) / sigma2_eta_hat > 1e-3
         
         sigma2_eta_hat_old = sigma2_eta_hat
-#        println("Iteration $i:")
         
         # construct Sigma matrix based on our best estimate
-        Sigma = Sigma2_eps + sigma2_eta_hat * eye(Nobs)
+        Sigma = (sigma2_eps + sigma2_eta_hat) * eye(Nobs)
 
         # estimate beta first
-        SigInv = diagm(1.0 ./ diag(Sigma))
-        beta_hat = inv(X' * SigInv * X) * X' * SigInv * Z
+        XSX = (X' * (Sigma \ X))
+        beta_hat = XSX \ X' * (Sigma \ Z)
 
         # compute the "kriging residuals"
         res = Z - X * beta_hat
-#        println("Residual mean $(mean(res))")
 
         # then estimate sigma_eta
-        sigma2_eta_hat = 1.0 / (size(X,1) - size(X,2)) * sum(max(res.^2 - diag(Sigma2_eps), 0))
+        s2_eps = sigma2_eps * ones(Float64, size(res))
+        if meth == 1
+            sigma2_eta_hat = numerical_solve_bisect(res.^2, s2_eps, size(X,2))
+        elseif meth == 2
+            sigma2_eta_hat = 0.0
+            for j=1:size(X,1)
+                sigma2_eta_hat += res[j]^2 - s2_eps[j] + dot(vec(X[j,:]), vec((XSX \ X[j,:]')))
+            end
+            sigma2_eta_hat /= size(X,1)
+        elseif meth == 3
+            sigma2_eta_hat = sum(res.^2) / (size(X,1) - size(X,2)) - s2_eps[1]
+        else
+            error("Error in method specification")
+        end
+            
 
-#        println("  beta_hat $beta_hat")
-#        println("  sigma2_eta_hat $sigma2_eta_hat")
+#        println("iter $i:  beta_hat $beta_hat")
+#        println("iter $i:  sigma2_eta_hat $sigma2_eta_hat")
 
         i += 1
     end
 
-    return sigma2_eta_hat, res
+    return sigma2_eta_hat, beta_hat, res
 
 end
 
-
-function trend_surface_model_kriging_bootstrap(X, Z, Sigma2_eps)
-
-    Nobs = size(X,1)
-    Niters = 500
-    s2_etas = zeros(Niters)
-    res_sum = zeros(Nobs, 1)
-
-    s2_eta_hat_orig, res_i = trend_surface_model_kriging(X, Z, Sigma2_eps)
-
-    for i=1:Niters
-
-        ndx = rand(1:Nobs,Nobs)
-        
-        Xi = X[ndx, :]
-        Zi = Z[ndx,:]
-        Sigma2_epsi = Sigma2_eps[ndx,ndx]
-
-        s2_eta_hat, res_i = trend_surface_model_kriging(Xi, Zi, Sigma2_epsi)
-        s2_etas[i] = s2_eta_hat
-        res_sum += res_i
-
-    end
-
-#    s2_eta_hat_mean = 1.0 / (size(X,1) - size(X,2)) * sum(1.0/Niters * res_sum - diag(Sigma2_eps))
-    s2_eta_hat_mean = sum(s2_etas) / Niters
-
-    return s2_eta_hat_orig * 2 - s2_eta_hat_mean, s2_etas
-
-end
 
 
 # first construct an actual model
-Nobs = 20
-beta = [ 1.1, -0.2, 0.3 ]''
-Sigma2_eps = 0.02^2 * eye(Nobs)
-sigma2_eta = 0.04^2
+Nobs = int(ARGS[1])
+meth = int(ARGS[2])
 
-s2 = Float64[]
+beta = [ 1.1, -0.3 ]''
+sigma_eps = 0.02
+sigma2_eps = sigma_eps^2
+sigma_eta = 0.04
+sigma2_eta = sigma_eta^2
+
+p = [beta, sigma2_eta]'
+println("$(p[1]), $(p[2]), $(p[3])")
+
+s2 = Array{Float64}[]
 s2_etas = nothing
+errs = 0
 
-for i = 1:200
+i = 1
+while i < 5000
 
-    X = randn(Nobs,3)
+    X = randn(Nobs,2)
     Z_exact = X * beta
-    Z = X * beta + sqrt(Sigma2_eps) * randn((Nobs,1)) + sqrt(sigma2_eta) * randn((Nobs,1))
+    Z = X * beta + sigma_eps * randn((Nobs,1)) + sigma_eta * randn((Nobs,1))
 
-#    sigma2_eta_hat, res_i = trend_surface_model_kriging_bootstrap(X, Z, Sigma2_eps)
-    sigma2_eta_hat, s2_etas = trend_surface_model_kriging_bootstrap(X, Z, Sigma2_eps)
-    push!(s2, sigma2_eta_hat)
+    sigma2_eta_hat, beta_hat, res = trend_surface_model_kriging(X, Z, sigma2_eps, meth)
+
+    if sigma2_eta_hat > 0
+        p = [beta_hat, sigma2_eta_hat]'
+        println("$(p[1]), $(p[2]), $(p[3])")
+        i += 1
+    else
+        errs += 1
+    end
 
 end
 
-println(sigma2_eta)
-#println(sigma2_eta_hat)
-for s in s2
-    println(s)
-end
-
-    
+println("$errs, 0, 0")

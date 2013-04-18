@@ -11,13 +11,13 @@ import string
 
 
 def readline_skip_comments(f):
-    """                                                                             Read a new line while skipping comments.                                        """
+    """
+    Read a new line while skipping comments.
+    """
     l = f.readline().strip()
-    while l[0] == '#':
+    while len(l) > 0 and l[0] == '#':
         l = f.readline().strip()
     return l
-
-
 
 
 class Observation:
@@ -109,6 +109,13 @@ class Station:
                                                    mlon[self.grid_pt], mlat[self.grid_pt])
 
 
+    def get_id(self):
+        """
+        Returns the id of the station.
+        """
+        return self.id
+
+
     def get_name(self):
         """
         Returns the name of the station.
@@ -185,6 +192,7 @@ class StationAdam(Station):
         f = codecs.open(station_file, 'r', encoding = 'utf-8')
         s = f.readline().strip()
         self.name = str(s[0:min(8, len(s))])
+        self.id = self.name
         
         # next line is location string, not interesting    
         f.readline()
@@ -270,7 +278,7 @@ class MesoWestStation(Station):
 
     def load_station_info(self, station_info):
         """
-        Load station information from an .info file.                                                                              """
+        Load station information from an .info file.                                                                  """
         with open(station_info, "r") as f:
 
             # read station id
@@ -305,22 +313,27 @@ class MesoWestStation(Station):
 
         with open(station_file, "r") as f:
 
-            # read in the date
-            tm_str = readline_skip_comments(f)
-            tstamp = gmt_tz.localize(datetime.strptime(tm_str, '%Y-%m-%d_%H:%M %Z'))
-            
-            # read in the variables
-            var_str = map(string.strip, readline_skip_comments(f).split(","))
-            
-            # read in observations
-            vals = map(lambda x: float(x), readline_skip_comments(f).split(","))
+            while True:
 
-            # read in variances
-            variances = map(lambda x: float(x), readline_skip_comments(f).split(","))
+                # read in the date or exit if another packet is not found
+                tm_str = readline_skip_comments(f)
+                if len(tm_str) == 0:
+                    break
 
-            # construct observations
-            for vn,val,var in zip(var_str, vals, variances):
-                self.obs[vn].append(Observation(self, tstamp, val, var, vn))
+                tstamp = gmt_tz.localize(datetime.strptime(tm_str, '%Y-%m-%d_%H:%M %Z'))
+            
+                # read in the variable names
+                var_str = map(string.strip, readline_skip_comments(f).split(","))
+            
+                # read in observations
+                vals = map(lambda x: float(x), readline_skip_comments(f).split(","))
+
+                # read in variances
+                variances = map(lambda x: float(x), readline_skip_comments(f).split(","))
+
+                # construct observations
+                for vn,val,var in zip(var_str, vals, variances):
+                    self.obs[vn].append(Observation(self, tstamp, val, var, vn))
 
 
     def data_ok(self):

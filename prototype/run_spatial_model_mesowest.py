@@ -73,9 +73,6 @@ def run_module():
     diagnostics().configure_tag("assim_K1", True, True, True)
     diagnostics().configure_tag("assim_data", False, False, True)
 
-    diagnostics().configure_tag("obs_residual_var", True, True, True)
-
-    diagnostics().configure_tag("fm10_model_residual_var", True, True, True)
     diagnostics().configure_tag("fm10_model_var", False, True, True)
     diagnostics().configure_tag("fm10_kriging_var", False, True, True)
 
@@ -147,10 +144,6 @@ def run_module():
     Kg = np.zeros((dom_shape[0], dom_shape[1], 9))
     cV12 = np.zeros_like(E)
     
-    # moisture state and observation residual variance estimators
-    mod_re = OnlineVarianceEstimator(np.zeros_like(E), np.ones_like(E) * 0.05, 1)
-    obs_re = OnlineVarianceEstimator(np.zeros((len(stations),)), np.ones(len(stations),) * 0.05, 1)
-    
     # initialize the mean field model (default fit is 1.0 of equilibrium before new information comes in)
     mfm = MeanFieldModel(cfg['lock_gamma'])
 
@@ -210,16 +203,9 @@ def run_module():
                 obs_vals = np.array([o.get_value() for o in obs_data[model_time]])
                 mod_vals = np.array([base_field[o.get_nearest_grid_point()] for o in obs_data[model_time]])
                 mod_na_vals = np.array([f_na[:,:,fuel_ndx][o.get_nearest_grid_point()] for o in obs_data[model_time]])
-                obs_re.update_with(obs_vals - mod_vals)
-                diagnostics().push("obs_residual_var", (t, np.mean(obs_re.get_variance())))
             
                 # predict the moisture field using observed fuel type
                 predicted_field = mfm.predict_field(base_field)
-
-                # update the model residual estimator and get current best estimate of variance
-                mod_re.update_with(f[:,:,fuel_ndx] - predicted_field)
-                mresV = mod_re.get_variance()
-                diagnostics().push("fm10_model_residual_var", (t, np.mean(mresV)))
 
                 # krige observations to grid points
                 Kf_fn, Vf_fn = trend_surface_model_kriging(obs_data[model_time], wrf_data, predicted_field)
@@ -304,11 +290,11 @@ def run_module():
         plt.clim([0.0, np.max(Vf_fn)])
         plt.axis('off')
         plt.colorbar()
-        plt.subplot(3,3,9)
-        render_spatial_field_fast(m, lon, lat, mresV, 'Model res. variance')
-        plt.clim([0.0, np.max(mresV)])
-        plt.axis('off')
-        plt.colorbar()
+#        plt.subplot(3,3,9)
+#        render_spatial_field_fast(m, lon, lat, mresV, 'Model variance')
+#        plt.clim([0.0, np.max(mresV)])
+#       plt.axis('off')
+#        plt.colorbar()
         
         plt.savefig(os.path.join(cfg['output_dir'], 'moisture_model_t%03d.png' % t))
 

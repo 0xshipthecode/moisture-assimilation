@@ -76,11 +76,37 @@ def field_plot_maker(jobs):
         plt.savefig(fname)
 
 
+
+def plot_variogram(dists, sqdiffs, bins, title, savename):
+    """
+    Plots the various (halved) squared differences as a point plot and overlays
+    a curve, which is the empirical variogram estimate.
+    """
+    bin_width = bins[1] - bins[0]
+
+    # compute an empirical variogram
+    bsqdiffs = []
+    for lim in bins:
+        ndx = [i for i in range(len(dists)) if (lim - bin_width <= dists[i]) and (dists[i] < lim)]
+        bsqdiffs.append(np.mean([sqdiffs[i] for i in ndx]))
+
+    # construct a plot at this time
+    plt.clf()
+    plt.plot(dists, sqdiffs, 'ro', markersize = 5)
+    plt.plot(np.arange(bin_width, max_dist+bin_width, bin_width) - bin_width/2.0, bsqdiffs, 'b-', linewidth = 2.0)
+    plt.xlabel('Distance [km]')
+    plt.ylabel('Squared obs. diff [-]')
+    plt.title('Variogram at time %s' % str(t_now))
+    plt.savefig(savename)
+
+
+
+
 def make_subdirs(path):
     """
     Construct subdirectories to store various parts of the results.
     """
-    for subp in ["fm10_assim", "fm10_na", "stats", "stations_vs_model", "stations"]:
+    for subp in ["fm10_assim", "fm10_na", "stats", "stations_vs_model", "stations", "res_variograms"]:
         try:
             os.mkdir(os.path.join(path, subp))
         except OSError:
@@ -117,12 +143,29 @@ if __name__ == '__main__':
 
     pool.close()
 
-    # extract the betas and model times
+    # gather all station ids that provide observations
+    sids = {}
+    for i in range(N):
+        sobs = data[i]['kriging_obs_station_ids']
+        sngp = data[i]['kriging_obs_ngp']
+        for sid,ngp in zip(sobs, sngp):
+            if sid not in sids:
+                sids[sid] = (ngp[0] - 1, ngp[1] - 1)
+
+    # sort keys to obtain a plotting order
+    sids_list = sorted(sids.keys())
+    sids_ngp = [ sids[s] for s in sids_list ]
+    sids_pos = {}
+    for i in range(len(sids_list)):
+        sids_pos[sids_list[i]] = i
+
+    # extract the betas, model times and kriging errors
     beta = np.zeros((N, np.prod(data[0]['kriging_beta'].shape)))
     maes = np.zeros((N, 3))
     mt = []
     ks2 = np.zeros(N)
     deltas = np.zeros((N, 6))
+    kerrors = []
     for i in range(N):
         mt.append(data[i]['mt'])
         beta[i,:] = data[i]['kriging_beta'][0,:]
@@ -132,6 +175,12 @@ if __name__ == '__main__':
         ks2[i] = data[i]['kriging_sigma2_eta']
         deltas[i,:] = data[i]['fm10_model_deltas']
 
+        derrs = di['kriging_errors'][0,:]
+        errs_i = np.zeros(len(sids_list))
+        errs_i[:] = float("nan")
+        for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)):
+            errs_i[sids_pos[s]] = derrs[j]
+        kerrors.append(errs_i)
 
     # prepare dates for x axis of time plots
     date_ndx = np.arange(0, N, N/20)
@@ -191,25 +240,6 @@ if __name__ == '__main__':
         plt.ylim(0, np.amax(deltas) * 1.1)
         plt.savefig(os.path.join(path, "stats", "max_model_deltas.png"))
     
-
-    # gather all station ids that provide observations
-    sids = {}
-    for i in range(N):
-        sobs = data[i]['kriging_obs_station_ids']
-        sngp = data[i]['kriging_obs_ngp']
-        for sid,ngp in zip(sobs, sngp):
-            if sid not in sids:
-                sids[sid] = (ngp[0] - 1, ngp[1] - 1)
-
-    # sort keys to obtain a plotting order
-    sids_list = sorted(sids.keys())
-    sids_ngp = [ sids[s] for s in sids_list ]
-    sids_pos = {}
-    for i in range(len(sids_list)):
-        sids_pos[sids_list[i]] = i
-
-    print("Generating station/image plots for following stations:")
-    print(sids_list)
 
     # find the maximal values of the plotted variables
     fm_max = 0.0
@@ -296,9 +326,18 @@ if __name__ == '__main__':
         plt.figure(figsize=(12,8))
         plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
         err_variance = []
+        kerrors = []
         for i in range(N):
             err_i = data[i]['kriging_errors']
             err_variance.append(1.0 / len(err_i) * np.sum(err_i ** 2))
+
+            derrs = di['kriging_errors'][0,:]
+            errs_i = np.zeros(len(sids_list))
+            errs_i[:] = float("nan")
+            for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)):
+                errs_i[sids_pos[s]] = derrs[j]
+            kerrors.append(errs_i)
+
         
         plt.plot(err_variance)
         plt.title('Variance of model error vs. time')
@@ -387,3 +426,56 @@ if __name__ == '__main__':
             plt.ylabel('Log10 variance')
             plt.savefig(os.path.join(path, "stations", "station_%s_var.png" % sid))
 
+
+
+    if "variograms" in what or "all" in what:
+        plt.figure(figsize = (12,8))
+
+        dists = []
+        sqdiffs = []
+
+        # we must load stations pertinent to the simulation (problem)
+        # load station data from files
+        with open(cfg['station_list_file'], 'r') as f:
+            si_list = f.read().split('\n')
+        si_list = filter(lambda x: len(x) > 0 and x[0] != '#', map(string.strip, si_list))
+
+        stations = {}
+        for code in si_list:
+            mws = MesoWestStation(code)
+            mws.load_station_info(os.path.join(cfg["station_info_dir"], "%s.info" % code))
+            stations[code] = mws
+
+        # first construct a distance matrix for all stations
+        st_dists = np.zeros((len(sids_list), len(sids_list)))
+        for j in range(len(sids_list)):
+            lonj, latj = j.get_position()
+            for k in range(j+1, len(sids_list)):
+                lonk, latk = k.get_position()
+                 if j in sids_pos and k in sids_pos:
+                     d = great_circle_distance(lonj, latj, lonk, latk)
+                     st_dists[sids_pos[j], sids_pos[k]] = d
+                     st_dists[sids_pos[k], sids_pos[j]] = d
+                             
+
+        # accumulate data over all time points
+        for i in range(N):
+
+            # retrieve valid measurements, rest is nan
+            di = data[i]
+            Nobs = len(di['kriging_obs'])
+            obs = np.zeros(len(sids_list))
+            obs[:] = float("nan")
+            for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)) :
+                obs[sids_pos[s]] = dobs[j]
+
+            # loop through pairs
+            for j in range(Nobs):
+                for k in range(j+1, Nobs):
+                    if not np.isnan(obs[j] + obs[k]):
+                        dists.append(st_dists[j,k])
+                        sq_diffs.append(0.5 * (obs[j] - obs[k])**2)
+
+
+        plot_variogram(dists, sqdiffs, np.arange(20, 500, 20), 'Variogram from TSM residuals',
+                       os.path.join(path, "res_variograms", "kriging_residual_variogram.png"))
