@@ -15,15 +15,42 @@ import os
 import string
 
 
+def plot_variogram(dists, sqdiffs, bins, title, savename):
+    """
+    Plots the various (halved) squared differences as a point plot and overlays
+    a curve, which is the empirical variogram estimate.
+    """
+    bin_width = bins[1] - bins[0]
+
+    # compute an empirical variogram
+    bsqdiffs = []
+    for lim in bins:
+        ndx = [i for i in range(len(dists)) if (lim - bin_width <= dists[i]) and (dists[i] < lim)]
+        bsqdiffs.append(np.mean([sqdiffs[i] for i in ndx]))
+
+    # construct a plot at this time
+    plt.clf()
+    plt.plot(dists, sqdiffs, 'ro', markersize = 5)
+    plt.plot(np.arange(bin_width, max_dist+bin_width, bin_width) - bin_width/2.0, bsqdiffs, 'b-', linewidth = 2.0)
+    plt.xlabel('Distance [km]')
+    plt.ylabel('Squared obs. diff [-]')
+    plt.title('Variogram at time %s' % str(t_now))
+    plt.savefig(savename)
+
+
+
 if __name__ == '__main__':
     
     init_diagnostics('results/examine_station_data.log')
 
+    what = [ 'variograms', 'distributions' ]
+
     # hack to use configuration object without option passing
-    cfg = { 'station_data_dir' : '../real_data/colorado_stations/',
-            'station_list_file' : 'clean_stations',
-            'wrf_data_file' : '../real_data/colorado_stations/wrfout_sel_5km_10mhist.nc',
-            'assimilation_window' : 3600,
+    cfg = { 'station_info_dir' : '../real_data/colorado_stations',
+            'station_obs_dir' : '../real_data/colorado_stations/20120601',
+            'station_list_file' : '../real_data/colorado_stations/clean_stations',
+            'wrf_data_file' : '../real_data/colorado_stations/wrf20120601_sel_5km_10mhist.nc',
+            'assimilation_window' : 1800,
             'output_dir' : 'results',
             'max_dist' : 200.0,
             'bin_width' : 20
@@ -41,7 +68,7 @@ if __name__ == '__main__':
     print("Loaded %d timestamps from WRF." % Nt)
         
     # load station data from files
-    with open(os.path.join(cfg['station_data_dir'], cfg['station_list_file']), 'r') as f:
+    with open(cfg['station_list_file'], 'r') as f:
         si_list = f.read().split('\n')
 
     si_list = filter(lambda x: len(x) > 0 and x[0] != '#', map(string.strip, si_list))
@@ -50,9 +77,9 @@ if __name__ == '__main__':
     stations = []
     for code in si_list:
         mws = MesoWestStation(code)
-        mws.load_station_info(os.path.join(cfg["station_data_dir"], "%s.info" % code))
+        mws.load_station_info(os.path.join(cfg["station_info_dir"], "%s.info" % code))
         mws.register_to_grid(wrf_data)
-        mws.load_station_data(os.path.join(cfg["station_data_dir"], "%s.obs" % code))
+        mws.load_station_data(os.path.join(cfg["station_obs_dir"], "%s.obs" % code))
         stations.append(mws)
 
     print('Loaded %d stations.' % len(stations))
@@ -74,37 +101,39 @@ if __name__ == '__main__':
     x, y = m(lon.ravel(), lat.ravel())
     plt.plot(x, y, 'k+', markersize = 4)
     plt.savefig(os.path.join(cfg['output_dir'], 'station_positions.png'))
+
+    if 'variograms' in what:
         
-    # part C - compute the variogram estimator for each assimilation window
-    obs_data = build_observation_data(stations, 'FM')
-    print("Found a total of %d observations." % len(obs_data))
-    assim_win = cfg['assimilation_window']
-    max_dist = cfg['max_dist']
-    bin_width = cfg['bin_width']
-    plt.figure(figsize = (10, 5))
+        # part A - compute the variogram estimator for each assimilation window
+        obs_data = build_observation_data(stations, 'FM')
+        print("Found a total of %d observations." % len(obs_data))
+        assim_win = cfg['assimilation_window']
+        max_dist = cfg['max_dist']
+        bin_width = cfg['bin_width']
+        plt.figure(figsize = (10, 5))
 
-    all_dists = []
-    all_sqdiffs = []
-    for t in range(0, Nt, 10):
+        all_dists = []
+        all_sqdiffs = []
+        bins = np.arange(bin_width, max_dist + bin_width, bin_width)
+        for t in range(0, Nt, 10):
 
-        # find number of observations valid now (depends on assimilation window)
-        t_now = tm[t]
-        obs_at_t = []
-        for k, v in obs_data.iteritems():
-            if abs((k-t_now).total_seconds()) < assim_win:
-                obs_at_t.extend(v)
+            # find number of observations valid now (depends on assimilation window)
+            t_now = tm[t]
+            obs_at_t = []
+            for k, v in obs_data.iteritems():
+                if abs((k-t_now).total_seconds()) < assim_win:
+                    obs_at_t.extend(v)
 
-        if len(obs_at_t) > 0:
-            # construct pairwise dataset
-            dists = []
-            sqdiffs = []
-            for i in obs_at_t:
-                pi = i.get_position()
-                oi = i.get_value()
-                for j in obs_at_t:
-                    pj = j.get_position()
-                    oj = j.get_value()
-                    if i != j:
+            if len(obs_at_t) > 0:
+                # construct pairwise dataset
+                dists = []
+                sqdiffs = []
+                for i in range(len(obs_at_t)):
+                    pi = obs_at_t[i].get_position()
+                    oi = obs_at_t[i].get_value()
+                    for j in range(i+1, len(obs_at_t)):
+                        pj = obs_at_t[j].get_position()
+                        oj = obs_at_t[j].get_value()
                         dist = great_circle_distance(pi[0], pi[1], pj[0], pj[1])
                         if dist < max_dist:
                             dists.append(dist)
@@ -112,37 +141,34 @@ if __name__ == '__main__':
                             all_dists.append(dist)
                             all_sqdiffs.append(0.5 * (oi - oj)**2)
 
-            # compute an empirical variogram
-            bsqdiffs = []
-            for lim in np.arange(bin_width, max_dist + bin_width, bin_width):
-                ndx = [i for i in range(len(dists)) if (lim-bin_width <= dists[i]) and (dists[i] < lim)]
-                bsqdiffs.append(np.mean([sqdiffs[i] for i in ndx]))
+                plot_variogram(dists, sqdiffs, bins, 'Variogram at time %s' % str(t_now), 
+                               os.path.join(cfg['output_dir'], 'variogram_est_%03d.png' % t))
 
-            # construct a plot at this time
+
+
+        plot_variogram(all_dists, all_sqdiffs, bins, 'Variogram (all observations)',
+                       os.path.join(cfg['output_dir'], 'variogram_est_all.png'))
+
+        # hack to plot the lower part of the variogram
+        a = plt.axis()
+        plt.axis([a[0], a[1], a[2], 0.005])
+        plt.savefig(os.path.join(cfg['output_dir'], 'variogram_est_all_censored.png'))
+
+    
+    # part B (obtain the distribution of FM observations from each station and plot it)
+    if 'distributions' in what:
+        plt.figure(figsize = (8, 4))
+        for s in stations:
+            obs = [o.get_value() for o in s.get_observations("FM")]
+            val_freq = {}
+            for v in obs:
+                a = val_freq.get(v, 0)
+                val_freq[v] = a+1
+
+            vals = np.array(sorted(val_freq.keys()))
+            freqs = [val_freq[v] for v in vals]
+        
             plt.clf()
-            plt.plot(dists, sqdiffs, 'ro', markersize = 5)
-            plt.plot(np.arange(bin_width, max_dist+bin_width, bin_width) - bin_width/2.0, bsqdiffs, 'b-', linewidth = 2.0)
-            plt.xlabel('Distance [km]')
-            plt.ylabel('Squared obs. diff [-]')
-            plt.title('Variogram at time %s' % str(t_now))
-            plt.savefig(os.path.join(cfg['output_dir'], 'variogram_est_%03d.png' % t))
-
-
-    # compute an empirical variogram
-    bsqdiffs = []
-    for lim in np.arange(bin_width, max_dist + bin_width, bin_width):
-        ndx = [i for i in range(len(all_dists)) if (lim-bin_width <= all_dists[i]) and (all_dists[i] < lim)]
-        bsqdiffs.append(np.mean([all_sqdiffs[i] for i in ndx]))
-
-    # construct a plot at this time
-    plt.clf()
-    plt.plot(all_dists, all_sqdiffs, 'ro', markersize = 5)
-    plt.plot(np.arange(bin_width, max_dist+bin_width, bin_width) - bin_width/2.0, bsqdiffs, 'b-', linewidth = 2.0)
-    plt.xlabel('Distance [km]')
-    plt.ylabel('Squared obs. diff [-]')
-    plt.title('Variogram for all times')
-    plt.savefig(os.path.join(cfg['output_dir'], 'variogram_est_all.png'))
-
-    a = plt.axis()
-    plt.axis([a[0], a[1], a[2], 0.01])
-    plt.savefig(os.path.join(cfg['output_dir'], 'variogram_est_all_censored.png'))
+            plt.bar(vals - 0.01/4, freqs, width = 0.01 / 2)
+            plt.title("Distribution of observations at %s" % s.get_id())
+            plt.savefig(os.path.join(cfg['output_dir'], 'distr_%s.png' % s.get_id()))

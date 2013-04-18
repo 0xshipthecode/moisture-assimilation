@@ -109,6 +109,13 @@ class Station:
                                                    mlon[self.grid_pt], mlat[self.grid_pt])
 
 
+    def get_id(self):
+        """
+        Returns the id of the station.
+        """
+        return self.id
+
+
     def get_name(self):
         """
         Returns the name of the station.
@@ -185,6 +192,7 @@ class StationAdam(Station):
         f = codecs.open(station_file, 'r', encoding = 'utf-8')
         s = f.readline().strip()
         self.name = str(s[0:min(8, len(s))])
+        self.id = self.name
         
         # next line is location string, not interesting    
         f.readline()
