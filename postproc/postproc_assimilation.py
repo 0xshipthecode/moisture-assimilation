@@ -80,7 +80,7 @@ def make_subdirs(path):
     """
     Construct subdirectories to store various parts of the results.
     """
-    for subp in ["fm10_assim", "fm10_na", "stats", "station_xsection", "stations"]:
+    for subp in ["fm10_assim", "fm10_na", "stats", "stations_vs_model", "stations"]:
         try:
             os.mkdir(os.path.join(path, subp))
         except OSError:
@@ -90,13 +90,15 @@ def make_subdirs(path):
 if __name__ == '__main__':
 
     if len(sys.argv) < 2:
-        print("Usage: postproc_assimilation.py frames_dir")
+        print("Usage: postproc_assimilation.py frames_dir what")
         sys.exit(1)
 
     path = sys.argv[1]
     what = sys.argv[2:]
     lst = glob.glob(os.path.join(path, "frame*"))
     N = len(lst)
+
+    print("Will compute %s." % str(what))
 
     # construct all subdirectories
     make_subdirs(path)
@@ -106,7 +108,6 @@ if __name__ == '__main__':
     pool = Pool(16)
     data = [None] * N
     read_job_list = [ (i, os.path.join(path, "frame%d" % i)) for i in range(1, N+1) ]
-    print len(read_job_list)
     read_res = pool.map(file_loader_slave, read_job_list)
     for i,di in read_res:
         data[i-1] = di
@@ -121,6 +122,7 @@ if __name__ == '__main__':
     maes = np.zeros((N, 3))
     mt = []
     ks2 = np.zeros(N)
+    deltas = np.zeros((N, 6))
     for i in range(N):
         mt.append(data[i]['mt'])
         beta[i,:] = data[i]['kriging_beta'][0,:]
@@ -128,6 +130,7 @@ if __name__ == '__main__':
         maes[i,1] = data[i]['model_raws_mae_assim']
         maes[i,2] = data[i]['model_na_raws_mae']
         ks2[i] = data[i]['kriging_sigma2_eta']
+        deltas[i,:] = data[i]['fm10_model_deltas']
 
 
     # prepare dates for x axis of time plots
@@ -151,7 +154,7 @@ if __name__ == '__main__':
             plt.ylim(0.0, y[1])
             plt.savefig(os.path.join(path, "stats", "kriging_beta_%d.png" % (i+1)))
 
-        # plot maes
+        # plot mean absolute errors
         plt.clf()
         plt.plot(maes)
         plt.legend(['forecast', 'analysis', 'no assim'])
@@ -162,7 +165,7 @@ if __name__ == '__main__':
         plt.ylim(0, y[1])
         plt.savefig(os.path.join(path, "stats", "model_maes.png"))
 
-        # plot the etas
+        # plot the microscale variability
         plt.clf()
         plt.plot(ks2)
         plt.ylabel('Microscale variability variance [-]')
@@ -171,6 +174,22 @@ if __name__ == '__main__':
         y = plt.ylim()
         plt.ylim(0, y[1])
         plt.savefig(os.path.join(path, "stats", "eta_variance.png"))
+
+        # plot the deltas
+        plt.clf()
+        plt.subplot(211)
+        plt.plot(deltas[:, [0,1,2,5]])
+        plt.legend(['dT1', 'dT10', 'dT100', 'dTr'])
+        plt.xticks([])
+        y = plt.ylim()
+        plt.ylim(0, np.amax(deltas[:, [0,1,2,5]]) * 1.1)
+        plt.subplot(212)
+        plt.plot(deltas[:, 3:5])
+        plt.legend(['dE', 'dS'])
+        plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+        y = plt.ylim()
+        plt.ylim(0, np.amax(deltas) * 1.1)
+        plt.savefig(os.path.join(path, "stats", "max_model_deltas.png"))
     
 
     # gather all station ids that provide observations
@@ -215,29 +234,21 @@ if __name__ == '__main__':
     if "fields" in what or "all" in what:
         print("Generating observation/model matchups for %d time points." % N)
 
-        kerrors = []
         for i in range(N):
             di = data[i]
             dobs = di['kriging_obs']
-            derrs = di['kriging_errors'][0,:]
             Nobs = len(dobs)
 
-            # fill out observations we have for this frame
             obs = np.zeros(len(sids_list))
             obs[:] = float("nan")
-            errs_i = np.zeros(len(sids_list))
-            errs_i[:] = float("nan")
             for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)) :
                 obs[sids_pos[s]] = dobs[j]
-            for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)):
-                errs_i[sids_pos[s]] = derrs[j]
-            kerrors.append(errs_i)
 
             m = [di['fm10_model_state'][p] for p in sids_ngp]
             m_a = [di['fm10_model_state_assim'][p] for p in sids_ngp]
             m_na = [di['fm10_model_na_state'][p] for p in sids_ngp]
             kf = [di['kriging_field'][p] for p in sids_ngp]
-            fname = os.path.join(path, "image_%03d.png" % i)
+            fname = os.path.join(path, "stations_vs_model", "stations_vs_model_%03d.png" % i)
 
             plot_queue.put((m, m_a, m_na, obs, kf, sids_pos, sids_list, fm_max, fname))
 
@@ -248,7 +259,6 @@ if __name__ == '__main__':
             field_queue.put((di['fm10_model_na_state'],
                              'Fuel moisture state %d at %s (NA)' % (i, str(mt[i])), fm_max_na,
                              os.path.join(path, "fm10_na", "fm10_na_field_%03d.png" % i)))
-
 
         # start up the workers and process the queue
         workers = []
@@ -282,6 +292,7 @@ if __name__ == '__main__':
 
     # print kriging statistics if statistics requested
     if "stats" in what or "all" in what:
+        print("Computing and storing statistics: errors, correlations")
         plt.figure(figsize=(12,8))
         plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.2)
         err_variance = []
@@ -296,8 +307,22 @@ if __name__ == '__main__':
         date_ndx = np.arange(0, N, N/20)
         dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
         plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-        plt.savefig(os.path.join(path, "error_variance.png"))
+        plt.savefig(os.path.join(path, "stats", "error_variance.png"))
 
+        kerrors = []
+        for i in range(N):
+            derrs = di['kriging_errors'][0,:]
+            dobs = di['kriging_obs']
+            Nobs = len(dobs)
+
+            # fill out observations we have for this frame
+            errs_i = np.zeros(len(sids_list))
+            errs_i[:] = float("nan")
+            for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)):
+                errs_i[sids_pos[s]] = derrs[j]
+            kerrors.append(errs_i)
+        
+        # plot kriging error statistics
         plt.clf()
         kecc = np.ma.corrcoef(np.ma.array(kerrors, mask = np.isnan(kerrors)), rowvar = False)
         plt.imshow(kecc, interpolation='nearest')
@@ -309,14 +334,14 @@ if __name__ == '__main__':
         ax.set_xticklabels(sids_list, rotation = 90)
         ax.set_yticks(np.arange(len(sids_list)))
         ax.set_yticklabels(sids_list)
-        plt.savefig(os.path.join(path, "kriging_error_correlations.png"))
+        plt.savefig(os.path.join(path, "stats", "kriging_error_correlations.png"))
 
         plt.clf()
         trindx = np.triu_indices(kecc.shape[0], 1)
         plt.hist(kecc[trindx], int(trindx[0].shape[0]**0.5), normed = True)
         plt.xlim([-1, 1])
         plt.title("Histogram of correlation coefficients of kriging errors")
-        plt.savefig(os.path.join(path, "kriging_errors_histogram.png"))
+        plt.savefig(os.path.join(path, "stats", "kriging_errors_histogram.png"))
 
 
     # plot agreement with simulated and station data
@@ -352,7 +377,7 @@ if __name__ == '__main__':
             plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
             plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
             plt.ylabel('Fuel moisture [g]')
-            plt.savefig(os.path.join(path, "station_%s.png" % sid))
+            plt.savefig(os.path.join(path, "stations", "station_%s.png" % sid))
 
             plt.clf()
             plt.plot(np.log10(kv), 'ko')
@@ -360,5 +385,5 @@ if __name__ == '__main__':
             plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
             plt.legend([ 'kriging var', 'model var' ])
             plt.ylabel('Log10 variance')
-            plt.savefig(os.path.join(path, "station_%s_var.png" % sid))
+            plt.savefig(os.path.join(path, "stations", "station_%s_var.png" % sid))
 
