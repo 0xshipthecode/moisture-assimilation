@@ -135,10 +135,6 @@ def run_module():
     Kg = np.zeros((dom_shape[0], dom_shape[1], 9))
     cV12 = np.zeros_like(E)
     
-    # moisture state and observation residual variance estimators
-    mod_re = OnlineVarianceEstimator(np.zeros_like(E), np.ones_like(E) * 0.05, 1)
-    obs_re = OnlineVarianceEstimator(np.zeros((len(stations),)), np.ones(len(stations),) * 0.05, 1)
-    
     # initialize the mean field model (default fit is 1.0 of equilibrium before new information comes in)
     mfm = MeanFieldModel(cfg['lock_gamma'])
 

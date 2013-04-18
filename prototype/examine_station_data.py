@@ -3,9 +3,7 @@ from time_series_utilities import match_time_series, build_observation_data
 from spatial_model_utilities import render_spatial_field, great_circle_distance
                                     
 from wrf_model_data import WRFModelData
-from observation_stations import StationAdam, Observation
-from mean_field_model import MeanFieldModel
-from statistics import compute_ols_estimator
+from observation_stations import MesoWestStation
 from diagnostics import init_diagnostics, diagnostics
 
 from mpl_toolkits.basemap import Basemap
@@ -14,64 +12,50 @@ import numpy as np
 from matplotlib.dates import DateFormatter
 import pytz
 import os
-
-
-station_list = [  "Julian_Moisture",
-                  "Goose_Valley_Fuel_Moisture",
-                  "Oak_Grove_Moisture",
-                  "Decanso_Moisture",
-                  "Alpine_Moisture",
-                  "Ranchita_Moisture",
-                  "Camp_Elliot_Moisture"
-                ]
-                  
-station_data_dir = "../real_data/witch_creek/"
-
-
-
-def plot_stations_vs_model_ts(stations, field_name, field, wrf_data):
-    
-    # extract station time series and corresponding grid point time series
-    f = plt.figure()
-    f.subplots_adjust(hspace = 1.2)
-    sp = 1
-    for s in stations:
-        i, j = s.get_nearest_grid_point()
-        model_tm = wrf_data.get_times()
-        mindx, obs_list = s.get_observations_for_times(field_name, model_tm)
-        obs_ts = [obs.get_value() for obs in obs_list]
-        common_tm = [model_tm[t] for t in mindx]
-        ax = plt.subplot(4, 2, sp)
-        ax.xaxis.set_major_formatter(DateFormatter('%H:%m')) 
-        plt.plot(common_tm, obs_ts, 'ro', common_tm, field[:, i, j], 'gx-', linewidth = 2)
-        plt.title('%s vs. model %s' % (s.get_name(), field_name))
-        for l in ax.get_xticklabels():
-            l.set_rotation(90)
-        sp += 1
-
+import string
 
 
 if __name__ == '__main__':
     
     init_diagnostics('results/examine_station_data.log')
 
+    # hack to use configuration object without option passing
+    cfg = { 'station_data_dir' : '../real_data/colorado_stations/',
+            'station_list_file' : 'clean_stations',
+            'wrf_data_file' : '../real_data/colorado_stations/wrfout_sel_5km_10mhist.nc',
+            'assimilation_window' : 3600,
+            'output_dir' : 'results',
+            'max_dist' : 200.0,
+            'bin_width' : 20
+          }
+
     # load the smallest domain
-    wrf_data = WRFModelData('../real_data/witch_creek/realfire03_d04.nc', tz_name = 'US/Pacific')
+    wrf_data = WRFModelData(cfg['wrf_data_file'], ['T2', 'PSFC', 'Q2', 'HGT'])
 
     # read in vars
     lon, lat = wrf_data.get_lons(), wrf_data.get_lats() 
-    P, Q, T, rain = wrf_data['PSFC'], wrf_data['Q2'], wrf_data['T2'], wrf_data['RAINNC']
-    tm = wrf_data.get_times()
+    hgt = wrf_data['HGT']
+    tm = wrf_data.get_gmt_times()
     Nt = len(tm)
+
+    print("Loaded %d timestamps from WRF." % Nt)
         
-    # load stations and match then to grid points
     # load station data from files
-    tz = pytz.timezone('US/Pacific')
-    stations = [Station(os.path.join(station_data_dir, s), tz, wrf_data) for s in station_list]
-    
-    for st in stations:
-        st.set_measurement_variance('fm10', 0.1)
-        st.set_measurement_variance('air_temp', 0.1)
+    with open(os.path.join(cfg['station_data_dir'], cfg['station_list_file']), 'r') as f:
+        si_list = f.read().split('\n')
+
+    si_list = filter(lambda x: len(x) > 0 and x[0] != '#', map(string.strip, si_list))
+
+    # for each station id, load the station
+    stations = []
+    for code in si_list:
+        mws = MesoWestStation(code)
+        mws.load_station_info(os.path.join(cfg["station_data_dir"], "%s.info" % code))
+        mws.register_to_grid(wrf_data)
+        mws.load_station_data(os.path.join(cfg["station_data_dir"], "%s.obs" % code))
+        stations.append(mws)
+
+    print('Loaded %d stations.' % len(stations))
     
     # construct basemap for rendering
     domain_rng = wrf_data.get_domain_extent()
@@ -79,14 +63,8 @@ if __name__ == '__main__':
                 urcrnrlon=domain_rng[2],urcrnrlat=domain_rng[3],
                 projection = 'mill')
 
-    # compute the equilibrium moisture on grid points (for all times t)
-    Ed, Ew = wrf_data.get_moisture_equilibria()
-    E = 0.5 * (Ed + Ew)
-    
-    mfm = MeanFieldModel()
-
     # show the equilibrium field and render position of stations on top
-    render_spatial_field(m, lon, lat, E[0,:,:], 'Equilibrium moisture')
+    render_spatial_field(m, lon, lat, hgt[0,:,:], 'Station positions over topography')
     for s in stations:
         slon, slat = s.get_position()
         x, y = m(slon, slat)
@@ -95,168 +73,76 @@ if __name__ == '__main__':
 
     x, y = m(lon.ravel(), lat.ravel())
     plt.plot(x, y, 'k+', markersize = 4)
+    plt.savefig(os.path.join(cfg['output_dir'], 'station_positions.png'))
         
-    # part C - fit the mean field model
-    obs_data = build_observation_data(stations, 'fm10', wrf_data)
-    gammas = []
-    residuals = {}
-    ot = []
-    for t in range(Nt):
-        if tm[t] in obs_data:
-            ot.append(t)
-            obs_at_t = obs_data[tm[t]] 
-            mfm.fit_to_data(E[t, :, :], obs_at_t)
-            gammas.append(mfm.gamma)
-            mu = mfm.predict_field(E[t,:,:])
-            
-            for obs in obs_at_t:
-                i, j = obs.get_nearest_grid_point()
-                sn = obs.get_station().get_name()
-                rs = residuals[sn] if sn in residuals else []
-                rs.append(obs.get_value() - gammas[-1] * E[t, i, j])
-                residuals[sn] = rs
-    
-    gammas = np.array(gammas)
-    ot = np.array(ot)
+    # part C - compute the variogram estimator for each assimilation window
+    obs_data = build_observation_data(stations, 'FM')
+    print("Found a total of %d observations." % len(obs_data))
+    assim_win = cfg['assimilation_window']
+    max_dist = cfg['max_dist']
+    bin_width = cfg['bin_width']
+    plt.figure(figsize = (10, 5))
 
-    # part B, compare values at the same times
-    for st_field_name, field in [ ('air_temp', T[ot,:,:] - 273.15), ('fm10', E[ot,:,:])]:
-        plot_stations_vs_model_ts(stations, st_field_name, field, wrf_data)
-        plt.savefig('results/%s_station_vs_equi.png' % st_field_name)
+    all_dists = []
+    all_sqdiffs = []
+    for t in range(0, Nt, 10):
 
-    # plot fitted model
-    plot_stations_vs_model_ts(stations, 'fm10', gammas[:, np.newaxis, np.newaxis] * E[ot,:,:], wrf_data)
-    plt.subplot(4,2,8)
-    plt.plot(gammas)
-    plt.title('Gamma values vs observation time')
-    plt.savefig('results/%s_station_vs_fitted_equi.png' % st_field_name)
-    
-    for s in stations:
-        print("station: %s elevation %g m" % (s.get_name(), s.get_elevation()))
-        
-    # **********************************************************************************
-    # compute COVARIANCE between station residuals and plot this vs. distance
-    Ns = len(stations)
-    ss = [s.get_name() for s in stations]
-    C = np.zeros((Ns,Ns))
-    D = np.zeros((Ns,Ns))
-    E = np.zeros((Ns,Ns))
-    for i in range(Ns):
-        r1, (lon1, lat1) = residuals[ss[i]], stations[i].get_position()
-        for j in range(Ns):
-            r2, (lon2, lat2) = residuals[ss[j]], stations[j].get_position()
-            cc = np.cov(r1, r2)
-            C[i,j] = cc[0, 1]
-            D[i,j] = great_circle_distance(lon1, lat2, lon2, lat2)
-            E[i,j] = np.abs(stations[i].get_elevation() - stations[j].get_elevation()) / 1000.0
+        # find number of observations valid now (depends on assimilation window)
+        t_now = tm[t]
+        obs_at_t = []
+        for k, v in obs_data.iteritems():
+            if abs((k-t_now).total_seconds()) < assim_win:
+                obs_at_t.extend(v)
 
-    f = plt.figure(figsize = (8,8))
-    f.subplots_adjust(hspace = 0.5, wspace = 0.5)
-    ax = plt.subplot(221)
-    plt.imshow(C, interpolation = 'nearest')
-    plt.title('Covariance [-]')
-    plt.colorbar()
-    ax.set_xticks(np.arange(len(ss)))
-    ax.set_xticklabels(ss, rotation = 90)
-    ax.set_yticks(np.arange(len(ss)))
-    ax.set_yticklabels(ss)
-    ax = plt.subplot(222)
-    plt.imshow(D, interpolation = 'nearest')
-    plt.title('Distance [km]')
-    ax.set_xticks(np.arange(len(ss)))
-    ax.set_xticklabels(ss, rotation = 90)
-    ax.set_yticks(np.arange(len(ss)))
-    ax.set_yticklabels(ss)
-    plt.colorbar()
-    plt.subplot(223)
-    colors = 'rgbcmyk'
-    for r in range(D.shape[0]):
-        ndx = np.setdiff1d(np.arange(Ns), [r])
-        plt.plot(D[r,ndx], C[r,ndx], '%so' % colors[r])
-    plt.grid()
+        if len(obs_at_t) > 0:
+            # construct pairwise dataset
+            dists = []
+            sqdiffs = []
+            for i in obs_at_t:
+                pi = i.get_position()
+                oi = i.get_value()
+                for j in obs_at_t:
+                    pj = j.get_position()
+                    oj = j.get_value()
+                    if i != j:
+                        dist = great_circle_distance(pi[0], pi[1], pj[0], pj[1])
+                        if dist < max_dist:
+                            dists.append(dist)
+                            sqdiffs.append(0.5 * (oi - oj)**2)
+                            all_dists.append(dist)
+                            all_sqdiffs.append(0.5 * (oi - oj)**2)
+
+            # compute an empirical variogram
+            bsqdiffs = []
+            for lim in np.arange(bin_width, max_dist + bin_width, bin_width):
+                ndx = [i for i in range(len(dists)) if (lim-bin_width <= dists[i]) and (dists[i] < lim)]
+                bsqdiffs.append(np.mean([sqdiffs[i] for i in ndx]))
+
+            # construct a plot at this time
+            plt.clf()
+            plt.plot(dists, sqdiffs, 'ro', markersize = 5)
+            plt.plot(np.arange(bin_width, max_dist+bin_width, bin_width) - bin_width/2.0, bsqdiffs, 'b-', linewidth = 2.0)
+            plt.xlabel('Distance [km]')
+            plt.ylabel('Squared obs. diff [-]')
+            plt.title('Variogram at time %s' % str(t_now))
+            plt.savefig(os.path.join(cfg['output_dir'], 'variogram_est_%03d.png' % t))
+
+
+    # compute an empirical variogram
+    bsqdiffs = []
+    for lim in np.arange(bin_width, max_dist + bin_width, bin_width):
+        ndx = [i for i in range(len(all_dists)) if (lim-bin_width <= all_dists[i]) and (all_dists[i] < lim)]
+        bsqdiffs.append(np.mean([all_sqdiffs[i] for i in ndx]))
+
+    # construct a plot at this time
+    plt.clf()
+    plt.plot(all_dists, all_sqdiffs, 'ro', markersize = 5)
+    plt.plot(np.arange(bin_width, max_dist+bin_width, bin_width) - bin_width/2.0, bsqdiffs, 'b-', linewidth = 2.0)
     plt.xlabel('Distance [km]')
-    plt.ylabel('Covariance [-]')
-    plt.title('Aggregate plot of covar vs. dist')
+    plt.ylabel('Squared obs. diff [-]')
+    plt.title('Variogram for all times')
+    plt.savefig(os.path.join(cfg['output_dir'], 'variogram_est_all.png'))
 
-    plt.subplot(224)
-    iu1 = np.triu_indices(Ns, 1)
-    Dt = D[iu1]
-    Ct = C[iu1]
-    plt.plot(Dt, Ct, 'ro')
-    plt.grid()
-    plt.xlabel('Distance [km]')
-    plt.ylabel('Covariance [-]')
-    plt.title('Aggregate plot of covar vs. distance')
-    plt.savefig('results/station_residuals_covariance.png')
-
-#    f = open('distance_vs_covariance.txt', 'w')
-#    for i in range(Dt.shape[0]):
-#        f.write('%g,%g\n' % (Dt[i], Ct[i]))
-#    f.close() 
-
-
-    # **********************************************************************************
-    # compute CORRELATION COEFFICIENT between station residuals and plot this vs. distance
-    C = np.zeros((Ns,Ns))
-    D = np.zeros((Ns,Ns))
-    E = np.zeros((Ns,Ns))
-    for i in range(Ns):
-        r1, (lon1, lat1) = residuals[ss[i]], stations[i].get_position()
-        for j in range(Ns):
-            s2name = stations[j].get_name()
-            r2, (lon2, lat2) = residuals[ss[j]], stations[j].get_position()
-            cc = np.corrcoef(r1, r2)
-            C[i,j] = cc[0, 1]
-            D[i,j] = great_circle_distance(lon1, lat2, lon2, lat2)
-            E[i,j] = np.abs(stations[i].get_elevation() - stations[j].get_elevation()) / 1000.0
-
-    f = plt.figure(figsize = (8,8))
-    f.subplots_adjust(hspace = 0.5, wspace = 0.5)
-    ax = plt.subplot(221)
-    plt.imshow(C, interpolation = 'nearest')
-    plt.clim([0.0, 1.0])
-    plt.title('Correlation coefficient [-]')
-    plt.colorbar()
-    ax.set_xticks(np.arange(len(ss)))
-    ax.set_xticklabels(ss, rotation = 90)
-    ax.set_yticks(np.arange(len(ss)))
-    ax.set_yticklabels(ss)
-    ax = plt.subplot(222)
-    plt.imshow(D, interpolation = 'nearest')
-    plt.title('Distance [km]')
-    ax.set_xticks(np.arange(len(ss)))
-    ax.set_xticklabels(ss, rotation = 90)
-    ax.set_yticks(np.arange(len(ss)))
-    ax.set_yticklabels(ss)
-    plt.colorbar()
-    plt.subplot(223)
-    colors = 'rgbcmyk'
-    for r in range(D.shape[0]):
-        ndx = np.setdiff1d(np.arange(Ns), [r])
-        plt.plot(D[r,ndx], C[r,ndx], '%so' % colors[r])
-    plt.ylim([0.0, 1.0])
-    plt.grid()
-    plt.xlabel('Distance [km]')
-    plt.ylabel('Correlation coefficient [-]')
-    plt.title('Aggregate plot of cc vs. dist')
-
-    plt.subplot(224)
-    iu1 = np.triu_indices(Ns, 1)
-    Et = E[iu1]
-    Dt = D[iu1]
-    Ct = C[iu1]
-    beta, Rsq = compute_ols_estimator(np.hstack([Dt[:,np.newaxis], np.ones_like(Dt[:,np.newaxis])]), Ct[:,np.newaxis])
-    print beta, Rsq
-    olsDT = beta[1] + beta[0] * Dt
-    plt.plot(Dt, Ct, 'ro')
-    plt.plot(Dt, olsDT, 'k-')
-    plt.ylim([0.0, 1.0])
-    plt.legend(['Data', 'OLS fit'], loc = 'lower left', prop = { 'size' : 10 } )
-    plt.grid()
-    plt.xlabel('Distance [km]')
-    plt.ylabel('Correlation coefficient [-]')
-    plt.title('Aggregate plot of cc vs. distance')
-    plt.savefig('results/station_residuals_correlation.png')
-    
-    plt.show()
-    
+    a = plt.axis()
+    plt.axis([a[0], a[1], a[2], 0.01])
+    plt.savefig(os.path.join(cfg['output_dir'], 'variogram_est_all_censored.png'))
