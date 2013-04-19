@@ -6,8 +6,10 @@ import matplotlib.pyplot as plt
 import glob
 import os
 import cPickle
+import string
+from observation_stations import MesoWestStation
 from multiprocessing import Pool, Queue, Process
-
+from spatial_model_utilities import great_circle_distance
 from datetime import datetime
 
 num_workers = 16
@@ -93,10 +95,10 @@ def plot_variogram(dists, sqdiffs, bins, title, savename):
     # construct a plot at this time
     plt.clf()
     plt.plot(dists, sqdiffs, 'ro', markersize = 5)
-    plt.plot(np.arange(bin_width, max_dist+bin_width, bin_width) - bin_width/2.0, bsqdiffs, 'b-', linewidth = 2.0)
+    plt.plot(bins - bin_width/2.0, bsqdiffs, 'b-', linewidth = 2.0)
     plt.xlabel('Distance [km]')
     plt.ylabel('Squared obs. diff [-]')
-    plt.title('Variogram at time %s' % str(t_now))
+    plt.title(title)
     plt.savefig(savename)
 
 
@@ -124,7 +126,7 @@ if __name__ == '__main__':
     lst = glob.glob(os.path.join(path, "frame*"))
     N = len(lst)
 
-    print("Will compute %s." % str(what))
+    print("Will compute %s from %d frames." % (str(what), N))
 
     # construct all subdirectories
     make_subdirs(path)
@@ -176,6 +178,7 @@ if __name__ == '__main__':
         deltas[i,:] = data[i]['fm10_model_deltas']
 
         derrs = di['kriging_errors'][0,:]
+        Nobs = len(derrs)
         errs_i = np.zeros(len(sids_list))
         errs_i[:] = float("nan")
         for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)):
@@ -433,12 +436,16 @@ if __name__ == '__main__':
 
         dists = []
         sqdiffs = []
+        cfg = { 'station_list_file' : '../real_data/colorado_stations/clean_stations',
+                'station_info_dir' : '../real_data/colorado_stations' }
+
+        print("Plotting variograms for residuals, using %d registered stations." % len(sids_list))
 
         # we must load stations pertinent to the simulation (problem)
         # load station data from files
         with open(cfg['station_list_file'], 'r') as f:
             si_list = f.read().split('\n')
-        si_list = filter(lambda x: len(x) > 0 and x[0] != '#', map(string.strip, si_list))
+        si_list = filter(lambda x: (len(x) > 0) and (x[0] != '#'), map(string.strip, si_list))
 
         stations = {}
         for code in si_list:
@@ -449,33 +456,43 @@ if __name__ == '__main__':
         # first construct a distance matrix for all stations
         st_dists = np.zeros((len(sids_list), len(sids_list)))
         for j in range(len(sids_list)):
-            lonj, latj = j.get_position()
+            lonj, latj = stations[sids_list[j]].get_position()
             for k in range(j+1, len(sids_list)):
-                lonk, latk = k.get_position()
-                 if j in sids_pos and k in sids_pos:
-                     d = great_circle_distance(lonj, latj, lonk, latk)
-                     st_dists[sids_pos[j], sids_pos[k]] = d
-                     st_dists[sids_pos[k], sids_pos[j]] = d
-                             
+                lonk, latk = stations[sids_list[k]].get_position()
+                d = great_circle_distance(lonj, latj, lonk, latk)
+                st_dists[j, k] = d
+                st_dists[k, j] = d
 
         # accumulate data over all time points
         for i in range(N):
 
+            dists_i = []
+            sqdiffs_i = []
+
             # retrieve valid measurements, rest is nan
             di = data[i]
-            Nobs = len(di['kriging_obs'])
+            dobs = di['kriging_obs']
+            
+            Nobs = len(dobs)
             obs = np.zeros(len(sids_list))
             obs[:] = float("nan")
             for (s, j) in zip(di['kriging_obs_station_ids'],range(Nobs)) :
                 obs[sids_pos[s]] = dobs[j]
 
             # loop through pairs
-            for j in range(Nobs):
-                for k in range(j+1, Nobs):
+            for j in range(len(obs)):
+                for k in range(j+1, len(obs)):
                     if not np.isnan(obs[j] + obs[k]):
-                        dists.append(st_dists[j,k])
-                        sq_diffs.append(0.5 * (obs[j] - obs[k])**2)
+                        dists_i.append(st_dists[j,k])
+                        sqdiffs_i.append(0.5 * (obs[j] - obs[k])**2)
 
+            # construct a variogram plot for every tenth timestamp
+            if i % 10 == 0:
+                plot_variogram(dists_i, sqdiffs_i, np.arange(20, 500, 20), 'Variogram from TSM residuals at %d' % i,
+                               os.path.join(path, "res_variograms", "kriging_residual_variogram_%03d.png" % i))
+
+            dists.extend(dists_i)
+            sqdiffs.extend(sqdiffs_i)
 
         plot_variogram(dists, sqdiffs, np.arange(20, 500, 20), 'Variogram from TSM residuals',
                        os.path.join(path, "res_variograms", "kriging_residual_variogram.png"))
