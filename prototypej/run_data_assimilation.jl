@@ -138,8 +138,8 @@ function main(args)
     E = squeeze(0.5 * (Ed[2,:,:] + Ew[2,:,:]), 1)
 
     # set up parameters
-    Q = eye(9) * cfg["Q"]
-    P0 = eye(9) * cfg["P0"]
+    Q = diagm(cfg["Q"])
+    P0 = diagm(cfg["P0"])
     mV = zeros(Float64, dsize)
     pred = zeros(Float64, dsize)
     mresV = zeros(Float64, dsize)

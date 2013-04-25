@@ -42,13 +42,13 @@ def plot_maker(jobs):
         (m, m_a, m_na, obs, kf, sids_pos, sids_list, fm_max, fname) = tmp
         
         plt.clf()
-        plt.plot(m, 'ro')
+#        plt.plot(m, 'ro')
         plt.plot(m_a, 'rs')
         plt.plot(m_na, 'go')
         plt.plot(obs, 'bo')
         plt.plot(kf, 'ko')
         plt.xticks(np.arange(len(sids_pos)), sids_list, rotation = 90)
-        plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
+        plt.legend(['analysis', 'no assim', 'observations', 'tsm field'])
         plt.ylabel('Fuel moisture [-]')
         plt.xlim(-0.5, len(sids_pos) - 0.5)
         plt.ylim(0.0, fm_max)
@@ -71,8 +71,8 @@ def field_plot_maker(jobs):
         (f, title, fm_max, fname) = tmp
         
         plt.clf()
-        plt.imshow(f)
-        plt.clim(0.0, fm_max)
+        plt.imshow(f[::-1,:])
+#        plt.clim(0.0, fm_max)
         plt.title(title, fontsize = 16)
         plt.colorbar()
         plt.savefig(fname)
@@ -175,6 +175,8 @@ if __name__ == '__main__':
         maes[i,1] = data[i]['model_raws_mae_assim']
         maes[i,2] = data[i]['model_na_raws_mae']
         ks2[i] = data[i]['kriging_sigma2_eta']
+        if ks2[i] < 0.0:
+            ks2[i] = 0.0
         deltas[i,:] = data[i]['fm10_model_deltas']
 
         derrs = di['kriging_errors'][0,:]
@@ -206,16 +208,29 @@ if __name__ == '__main__':
             plt.ylim(0.0, y[1])
             plt.savefig(os.path.join(path, "stats", "kriging_beta_%d.png" % (i+1)))
 
-        # plot mean absolute errors
+        # plot mean absolute differences
         plt.clf()
-        plt.plot(maes)
-        plt.legend(['forecast', 'analysis', 'no assim'])
-        plt.ylabel('Mean abs difference [g]')
+        plt.plot(maes[:, [1,2]])
+#        plt.legend(['forecast', 'analysis', 'no assim'])
+        plt.legend(['analysis', 'no assim'])
+        plt.ylabel('Mean abs difference [-]')
         plt.xlabel('Time [-]')
         plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-        y = plt.ylim()
-        plt.ylim(0, y[1])
-        plt.savefig(os.path.join(path, "stats", "model_maes.png"))
+ #       y = plt.ylim()
+ #       plt.ylim(0, y[1])
+        plt.savefig(os.path.join(path, "stats", "model_mads.png"))
+
+        # plot mean squares differences
+        plt.clf()
+        plt.plot(maes[:, [1,2]]**2)
+#        plt.legend(['forecast', 'analysis', 'no assim'])
+        plt.legend(['analysis', 'no assim'])
+        plt.ylabel('Mean squares difference [-]')
+        plt.xlabel('Time [-]')
+        plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+#        y = plt.ylim()
+#        plt.ylim(0, y[1])
+        plt.savefig(os.path.join(path, "stats", "model_msds.png"))
 
         # plot the microscale variability
         plt.clf()
@@ -223,9 +238,21 @@ if __name__ == '__main__':
         plt.ylabel('Microscale variability variance [-]')
 #        plt.xlabel('Time [-]')
         plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-        y = plt.ylim()
-        plt.ylim(0, y[1])
+#        y = plt.ylim()
+#        plt.ylim(0, y[1])
         plt.savefig(os.path.join(path, "stats", "eta_variance.png"))
+
+        plt.clf()
+        plt.subplot(2,1,1)
+        plt.plot(maes[:, [1,2]]**2)
+        plt.legend(['analysis', 'no assim'])
+        plt.ylabel('Mean squares difference [-]')
+        plt.xticks([])
+        plt.subplot(2,1,2)
+        plt.plot(ks2)
+        plt.ylabel('Microscale variability variance [-]')
+        plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
+        plt.savefig(os.path.join(path, "stats", "errors.png"))
 
         # plot the deltas
         plt.clf()
@@ -409,7 +436,7 @@ if __name__ == '__main__':
             kfo  = [ data[j]['kriging_field'][ngp] for j in range(N) ]
             kv   = [ data[j]['kriging_variance'][ngp] for j in range(N) ]
             mv   = [ data[j]['fm10_model_var'][ngp] for j in range(N) ]
-            plt.plot(m, 'r--')
+#            plt.plot(m, 'r--')
             plt.plot(m_a, 'r-')
             plt.plot(m_na, 'g-')
             plt.plot(obs, 'bx-')
@@ -417,7 +444,7 @@ if __name__ == '__main__':
             date_ndx = np.arange(0, N, N/20)
             dates = [mt[i].strftime("%m-%d %H:%M") for i in date_ndx]
             plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-            plt.legend(['pre-assim', 'post-assim', 'no assim', 'raws', 'kriging'])
+            plt.legend(['analysis', 'no assim', 'observations', 'tsm field'])
             plt.ylabel('Fuel moisture [g]')
             plt.savefig(os.path.join(path, "stations", "station_%s.png" % sid))
 
@@ -425,7 +452,7 @@ if __name__ == '__main__':
             plt.plot(np.log10(kv), 'ko')
             plt.plot(np.log10(mv), 'ro')
             plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
-            plt.legend([ 'kriging var', 'model var' ])
+            plt.legend([ 'microscale var', 'model var' ])
             plt.ylabel('Log10 variance')
             plt.savefig(os.path.join(path, "stations", "station_%s_var.png" % sid))
 
@@ -438,6 +465,9 @@ if __name__ == '__main__':
         sqdiffs = []
         cfg = { 'station_list_file' : '../real_data/colorado_stations/clean_stations',
                 'station_info_dir' : '../real_data/colorado_stations' }
+
+#        cfg = { 'station_list_file' : '../real_data/witch_creek/station_list',
+#                'station_info_dir' : '../real_data/witch_creek' }
 
         print("Plotting variograms for residuals, using %d registered stations." % len(sids_list))
 
