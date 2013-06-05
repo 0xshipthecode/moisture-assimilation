@@ -170,7 +170,7 @@ if __name__ == '__main__':
     kerrors = []
     for i in range(N):
         mt.append(data[i]['mt'])
-        beta[i,:] = data[i]['kriging_beta'][0,:]
+        beta[i,:] = data[i]['kriging_beta'][:,0]
         maes[i,0] = data[i]['model_raws_mae']
         maes[i,1] = data[i]['model_raws_mae_assim']
         maes[i,2] = data[i]['model_na_raws_mae']
@@ -210,9 +210,10 @@ if __name__ == '__main__':
 
         # plot mean absolute differences
         plt.clf()
-        plt.plot(maes[:, [1,2]])
+        plt.plot(maes[:, 1]**2, 'b-')
+        plt.plot(maes[:, 2]**2, 'k--')
 #        plt.legend(['forecast', 'analysis', 'no assim'])
-        plt.legend(['analysis', 'no assim'])
+        plt.legend(['assim', 'no assim'])
         plt.ylabel('Mean abs difference [-]')
         plt.xlabel('Time [-]')
         plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
@@ -222,10 +223,11 @@ if __name__ == '__main__':
 
         # plot mean squares differences
         plt.clf()
-        plt.plot(maes[:, [1,2]]**2)
+        plt.plot(maes[:, 1]**2, 'b-')
+        plt.plot(maes[:, 2]**2, 'k--')
 #        plt.legend(['forecast', 'analysis', 'no assim'])
-        plt.legend(['analysis', 'no assim'])
-        plt.ylabel('Mean squares difference [-]')
+        plt.legend(['assim', 'no assim'])
+        plt.ylabel('Mean squared difference [-]')
         plt.xlabel('Time [-]')
         plt.xticks(date_ndx, dates, rotation = 90, size = 'small')
 #        y = plt.ylim()
@@ -244,9 +246,10 @@ if __name__ == '__main__':
 
         plt.clf()
         plt.subplot(2,1,1)
-        plt.plot(maes[:, [1,2]]**2)
-        plt.legend(['analysis', 'no assim'])
-        plt.ylabel('Mean squares difference [-]')
+        plt.plot(maes[:, 1]**2, 'b-')
+        plt.plot(maes[:, 2]**2, 'k--')
+        plt.legend(['assim', 'no assim'])
+        plt.ylabel('Mean squared difference [-]')
         plt.xticks([])
         plt.subplot(2,1,2)
         plt.plot(ks2)

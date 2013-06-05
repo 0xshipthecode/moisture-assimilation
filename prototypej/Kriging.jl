@@ -115,7 +115,16 @@ function trend_surface_model_kriging(obs_data, X, K, V)
         # recompute the covariance matrix
         Sigma = diagm(m_var) + s2_eta_hat * eye(Nobs)
         XtSX = Xobs' * (Sigma \ Xobs)
-        beta = XtSX \ Xobs' * (Sigma \ y)
+
+        # QR solution method of least squares
+        Sigma_1_2 = diagm(diag(Sigma).^-0.5)   # Sigma^(-1/2)
+        yt = Sigma_1_2 * y
+        Q, R = qr(Sigma_1_2 * Xobs)
+        beta = R \ (Q' * yt)
+
+        println("qr: res_norm -> $(norm(y - Xobs * beta))")
+        old_beta = XtSX \ Xobs' * (Sigma \ y)
+        println("normal eq: res_norm -> $(norm(y - Xobs * old_beta))")
         res = y - Xobs * beta
 
         # compute new estimate of variance of microscale variability
