@@ -1,7 +1,7 @@
-module ncHelpers
+module netcdf_helpers
 using Base
 using netcdf
-using C
+using netcdf_c_wrappers
 
 jltype2nctype={Int16=>NC_SHORT,
                Int32=>NC_INT,
@@ -101,7 +101,7 @@ function _nc_get_att(ncid::Integer,varid::Integer,name,attype::Integer,attlen::I
   return valsa
 end
 
-function _ncv_inq(nc::NcFile,varid::Integer)
+function _ncv_inq(nc::netcdf.NcFile,varid::Integer)
   id=nc.ncid
   ndim=length(nc.dim)
   # Inquire variables in the file
@@ -125,7 +125,7 @@ function _ncv_inq(nc::NcFile,varid::Integer)
   return (name,nctype,dimids,natts,vndim,isdimvar)
 end
 
-function _getvarindexbyname(nc::NcFile,varname::String)
+function _getvarindexbyname(nc::netcdf.NcFile,varname::String)
   va=nothing
   for v in nc.vars
     va = v[2].name==varname ? v[2] : va
@@ -133,7 +133,7 @@ function _getvarindexbyname(nc::NcFile,varname::String)
   return va
 end
 
-function getvarbyid(nc::NcFile,varid::Integer)
+function getvarbyid(nc::netcdf.NcFile,varid::Integer)
   va=nothing
   for v in nc.vars
     va = v[2].varid==varid ? v[2] : va
@@ -141,7 +141,7 @@ function getvarbyid(nc::NcFile,varid::Integer)
   return va
 end
 
-function getdimidbyname(nc::NcFile,dimname::String)
+function getdimidbyname(nc::netcdf.NcFile,dimname::String)
   da=nothing
   for d in nc.dim
     da = d.name==dimname ? d : da
@@ -149,7 +149,7 @@ function getdimidbyname(nc::NcFile,dimname::String)
   return da.dimid
 end
 
-function getdimnamebyid(nc::NcFile,dimid::Integer)
+function getdimnamebyid(nc::netcdf.NcFile,dimid::Integer)
   da=nothing
   for d in nc.dim
     da = d[2].dimid==dimid ? d[2] : da
@@ -177,7 +177,7 @@ function _nc_getatts_all(ncid::Integer,varid::Integer,natts::Integer)
   return atts
 end
 
-function _readdimvars(nc::NcFile)
+function _readdimvars(nc::netcdf.NcFile)
   for d in nc.dim
     for v in nc.vars
       if (d[2].name==v[2].name)

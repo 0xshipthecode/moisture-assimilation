@@ -1,4 +1,4 @@
-module C
+module netcdf_c_wrappers
 using Base
 export NC_NOERR,NC_MAX_NAME,NC_VERBOSE,NC_CHAR,NC_SHORT,NC_INT,NC_FLOAT,NC_DOUBLE,NC_GLOBAL,NC_CLOBBER,NC_NOCLOBBER
 #
@@ -21,15 +21,15 @@ const NC_NOCLOBBER=0x0004
 const libnetcdf = dlopen("libnetcdf")
 
 function ccallexpr(ccallsym::Symbol, outtype, argtypes::Tuple, argsyms::Tuple)
-    ccallargs = Any[expr(:quote, ccallsym), outtype, expr(:tuple, Any[argtypes...])]
+    ccallargs = Any[Expr(:quote, ccallsym), outtype, Expr(:tuple, argtypes...)]
     ccallargs = ccallsyms(ccallargs, length(argtypes), argsyms)
-    expr(:ccall, ccallargs)
+    Expr(:ccall, ccallargs...)
 end
 
 function ccallexpr(lib::Ptr, ccallsym::Symbol, outtype, argtypes::Tuple, argsyms::Tuple)
-    ccallargs = Any[expr(:call, Any[:dlsym, lib, expr(:quote, ccallsym)]), outtype, expr(:tuple, Any[argtypes...])]
+    ccallargs = Any[Expr(:call, :dlsym, lib, Expr(:quote, ccallsym)), outtype, Expr(:tuple, argtypes...)]
     ccallargs = ccallsyms(ccallargs, length(argtypes), argsyms)
-    expr(:ccall, ccallargs)
+    Expr(:ccall, ccallargs...)
 end
 
 function ccallsyms(ccallargs, n, argsyms)
@@ -50,7 +50,7 @@ end
 
 function funcdecexpr(funcsym, n::Int, argsyms)
     if length(argsyms) == n
-        return expr(:call, Any[funcsym, argsyms...])
+        return Expr(:call, funcsym, argsyms...)
     else
         exargs = Any[funcsym, argsyms[1:end-1]...]
         push(exargs, expr(:..., argsyms[end]))
@@ -102,7 +102,7 @@ for (jlname, h5name, outtype, argtypes, argsyms, ex_error) in
         end
         return ret
     end
-    ex_func = expr(:function, Any[ex_dec, ex_body])
+    ex_func = Expr(:function, ex_dec, ex_body)
     @eval begin
         $ex_func
     end
