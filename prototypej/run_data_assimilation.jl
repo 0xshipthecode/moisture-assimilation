@@ -43,7 +43,7 @@ function main(args)
     println("INFO: run_data_assimilation.jl started on $t1")
     
     ### Read configuration file and setup the system
-
+    println("INFO: reading in config file $(args[1])")
     cfg = evalfile(args[1])
 
     # create the output directory if it does not exist
@@ -160,11 +160,11 @@ function main(args)
     Xr = zeros(Float64, (dsize[1], dsize[2], Xd3))
     for i in 2:Xd3
         cov_id = cov_ids[i-1]
-        if has(st_covar_map, cov_id)
+        if haskey(st_covar_map, cov_id)
             println("INFO: processing static covariate $cov_id.")
             v = st_covar_map[cov_id]
             Xr[:,:,i] = v
-        elseif has(dyn_covar_map, cov_id)
+        elseif haskey(dyn_covar_map, cov_id)
             println("INFO: found dynamic covariate $(cov_id).")
         else
             error("ERROR: unknown covariate $(cov_id) encountered, fatal.")
